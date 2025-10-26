@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
@@ -574,124 +576,182 @@ class _AiChatPageState extends State<AiChatPage> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final isTablet = mediaQuery.size.width > 600;
-    final isLandscape = mediaQuery.orientation == Orientation.landscape;
     final sensorData = context.watch<SensorController>().sensorData;
     final gradient = (sensorData?.light == 0)
         ? AiChatPage._dayGradient
         : AiChatPage._nightGradient;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        flexibleSpace: AnimatedContainer(
-          duration: const Duration(seconds: 2),
-          decoration: BoxDecoration(gradient: gradient),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: adjustOpacity(Colors.tealAccent, 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.smart_toy_rounded,
-                color: Colors.tealAccent,
-                size: 24,
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double width = constraints.maxWidth;
+        final bool isTablet = width >= 720;
+        final bool isVeryCompact = width < 360;
+        final bool isCompact = width < 480;
+        final bool isLandscape = mediaQuery.orientation == Orientation.landscape;
+        final double contentMargin = isTablet ? 28.0 : isVeryCompact ? 12.0 : 16.0;
+        final double listHorizontalPadding = isTablet ? 24.0 : isVeryCompact ? 12.0 : 16.0;
+        final double listVerticalPadding = isTablet ? 24.0 : 16.0;
+        final double innerWidth = width - (contentMargin * 2);
+        final double listContentWidth = innerWidth - (listHorizontalPadding * 2);
+        final double safeListWidth = listContentWidth > 0 ? listContentWidth : innerWidth;
+        final double bubbleSideInset = isTablet
+            ? math.min(safeListWidth * 0.2, 120.0)
+            : (safeListWidth < 320 ? 12.0 : 20.0);
+        final double rawBubbleWidth = safeListWidth - bubbleSideInset;
+        final double safeBubbleWidth = rawBubbleWidth > 0
+            ? rawBubbleWidth
+            : (safeListWidth > 0 ? safeListWidth : width * 0.9);
+        final double bubbleMaxWidth = isTablet
+            ? math.min(safeBubbleWidth, 540.0)
+            : safeBubbleWidth;
+        final double titleFontSize = isTablet ? 20.0 : isCompact ? 17.0 : 18.5;
+        final double titleIconPadding = isCompact ? 6.0 : 8.0;
+        final double titleIconSize = isCompact ? 20.0 : 24.0;
+        final double titleSpacing = isCompact ? 8.0 : 12.0;
+        final EdgeInsets inputOuterMargin = EdgeInsets.symmetric(
+          horizontal: contentMargin,
+          vertical: isTablet ? 24.0 : 12.0,
+        );
+        final EdgeInsets inputInnerPadding = EdgeInsets.symmetric(
+          horizontal: isTablet ? 24.0 : isVeryCompact ? 16.0 : 20.0,
+          vertical: isTablet ? 16.0 : isVeryCompact ? 10.0 : 12.0,
+        );
+
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            flexibleSpace: AnimatedContainer(
+              duration: const Duration(seconds: 2),
+              decoration: BoxDecoration(gradient: gradient),
             ),
-            const SizedBox(width: 12),
-            Text(
-              'Asistente IA',
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.tealAccent),
-            onPressed: _startNewChat,
-            tooltip: 'Nuevo chat',
-          ),
-          IconButton(
-            icon: const Icon(Icons.history, color: Colors.tealAccent),
-            onPressed: () => _showChatHistory(context),
-            tooltip: 'Ver historial completo',
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.tealAccent),
-            onPressed: _loadChatHistory,
-            tooltip: 'Recargar historial',
-          ),
-        ],
-      ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const ParticleField(),
-          AnimatedContainer(
-            duration: const Duration(seconds: 2),
-            curve: Curves.easeInOut,
-            decoration: BoxDecoration(gradient: gradient),
-          ),
-          SafeArea(
-            child: Column(
+            title: Row(
               children: [
-                _QuickActionsBar(
-                  isLoading: _isAnalysisLoading,
-                  isTablet: isTablet,
-                  messageCount: _messages.length,
-                  onGenerateAnalysis: () => _showAnalysisDialog(context),
-                ),
-                Expanded(
-                  child: Container(
-                    margin: EdgeInsets.symmetric(horizontal: isTablet ? 24 : 16),
-                    decoration: BoxDecoration(
-                      color: adjustOpacity(Colors.black, 0.35),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: adjustOpacity(Colors.white, 0.1)),
-                    ),
-                    child: _messages.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: EdgeInsets.all(isTablet ? 24 : 16),
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) {
-                              final msg = _messages[index];
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  _buildMessageBubble({'user': msg['user']!}, true, isTablet),
-                                  const SizedBox(height: 8),
-                                  _buildMessageBubble({'ai': msg['ai']!}, false, isTablet),
-                                ],
-                              );
-                            },
-                          ),
+                Container(
+                  padding: EdgeInsets.all(titleIconPadding),
+                  decoration: BoxDecoration(
+                    color: adjustOpacity(Colors.tealAccent, 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.smart_toy_rounded,
+                    color: Colors.tealAccent,
+                    size: titleIconSize,
                   ),
                 ),
-                _MessageInputBar(
-                  controller: _messageController,
-                  isLandscape: isLandscape,
-                  isLoading: _isChatLoading,
-                  isTablet: isTablet,
-                  onSend: _sendMessage,
+                SizedBox(width: titleSpacing),
+                Flexible(
+                  child: Text(
+                    'Asistente IA',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: titleFontSize,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.add, color: Colors.tealAccent),
+                onPressed: _startNewChat,
+                tooltip: 'Nuevo chat',
+              ),
+              IconButton(
+                icon: const Icon(Icons.history, color: Colors.tealAccent),
+                onPressed: () => _showChatHistory(context),
+                tooltip: 'Ver historial completo',
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.tealAccent),
+                onPressed: _loadChatHistory,
+                tooltip: 'Recargar historial',
+              ),
+            ],
           ),
-        ],
-      ),
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              const ParticleField(),
+              AnimatedContainer(
+                duration: const Duration(seconds: 2),
+                curve: Curves.easeInOut,
+                decoration: BoxDecoration(gradient: gradient),
+              ),
+              SafeArea(
+                child: Column(
+                  children: [
+                    _QuickActionsBar(
+                      isLoading: _isAnalysisLoading,
+                      isTablet: isTablet,
+                      messageCount: _messages.length,
+                      onGenerateAnalysis: () => _showAnalysisDialog(context),
+                      horizontalPadding: contentMargin,
+                    ),
+                    Expanded(
+                      child: Container(
+                        margin: EdgeInsets.symmetric(horizontal: contentMargin),
+                        decoration: BoxDecoration(
+                          color: adjustOpacity(Colors.black, 0.35),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: adjustOpacity(Colors.white, 0.1)),
+                        ),
+                        child: _messages.isEmpty
+                            ? _buildEmptyState()
+                            : ListView.builder(
+                                controller: _scrollController,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: listHorizontalPadding,
+                                  vertical: listVerticalPadding,
+                                ),
+                                itemCount: _messages.length,
+                                itemBuilder: (context, index) {
+                                  final msg = _messages[index];
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      _buildMessageBubble(
+                                        {'user': msg['user']!},
+                                        true,
+                                        isTablet,
+                                        bubbleMaxWidth,
+                                        bubbleSideInset,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _buildMessageBubble(
+                                        {'ai': msg['ai']!},
+                                        false,
+                                        isTablet,
+                                        bubbleMaxWidth,
+                                        bubbleSideInset,
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                      ),
+                    ),
+                    _MessageInputBar(
+                      controller: _messageController,
+                      isLandscape: isLandscape,
+                      isLoading: _isChatLoading,
+                      isTablet: isTablet,
+                      outerMargin: inputOuterMargin,
+                      innerPadding: inputInnerPadding,
+                      onSend: _sendMessage,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -736,62 +796,73 @@ class _AiChatPageState extends State<AiChatPage> {
     );
   }
 
-  Widget _buildMessageBubble(Map<String, String> msg, bool isUser, bool isTablet) {
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: EdgeInsets.only(
-          bottom: isTablet ? 16 : 12,
-          left: isUser ? (isTablet ? 100 : 60) : 0,
-          right: isUser ? 0 : (isTablet ? 100 : 60),
-        ),
-        padding: EdgeInsets.all(isTablet ? 20 : 16),
-        decoration: BoxDecoration(
-          color: isUser
-              ? adjustOpacity(Colors.tealAccent, 0.2)
-              : const Color(0xFF16213E),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: isUser ? const Radius.circular(16) : const Radius.circular(4),
-            bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(16),
-          ),
-          border: Border.all(
-            color: isUser ? adjustOpacity(Colors.tealAccent, 0.3) : Colors.transparent,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
+  Widget _buildMessageBubble(
+    Map<String, String> msg,
+    bool isUser,
+    bool isTablet,
+    double maxBubbleWidth,
+    double horizontalInset,
+  ) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: isTablet ? 16 : 12,
+        left: isUser ? horizontalInset : 0,
+        right: isUser ? 0 : horizontalInset,
+      ),
+      child: Align(
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+          child: Container(
+            padding: EdgeInsets.all(isTablet ? 20 : 16),
+            decoration: BoxDecoration(
+              color: isUser
+                  ? adjustOpacity(Colors.tealAccent, 0.2)
+                  : const Color(0xFF16213E),
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: isUser ? const Radius.circular(16) : const Radius.circular(4),
+                bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(16),
+              ),
+              border: Border.all(
+                color: isUser ? adjustOpacity(Colors.tealAccent, 0.3) : Colors.transparent,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  isUser ? Icons.person : Icons.smart_toy_rounded,
-                  color: isUser ? Colors.tealAccent : Colors.blueAccent,
-                  size: 16,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isUser ? Icons.person : Icons.smart_toy_rounded,
+                      color: isUser ? Colors.tealAccent : Colors.blueAccent,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isUser ? 'Tu' : 'Asistente IA',
+                      style: GoogleFonts.poppins(
+                        color: isUser ? Colors.tealAccent : Colors.blueAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(height: 8),
                 Text(
-                  isUser ? 'Tu' : 'Asistente IA',
+                  isUser ? msg['user']! : msg['ai']!,
                   style: GoogleFonts.poppins(
-                    color: isUser ? Colors.tealAccent : Colors.blueAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    fontSize: isTablet ? 16 : 14,
+                    height: 1.4,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              isUser ? msg['user']! : msg['ai']!,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: isTablet ? 16 : 14,
-                height: 1.4,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     ).animate().fadeIn(duration: 300.ms).slideX(
@@ -851,26 +922,34 @@ bool _handleNaturalLanguageIntent(
 
   return handled;
 }
+
 class _QuickActionsBar extends StatelessWidget {
   const _QuickActionsBar({
     required this.isLoading,
     required this.isTablet,
     required this.messageCount,
     required this.onGenerateAnalysis,
+    required this.horizontalPadding,
   });
 
   final bool isLoading;
   final bool isTablet;
   final int messageCount;
   final VoidCallback onGenerateAnalysis;
+  final double horizontalPadding;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: isTablet ? 24 : 16, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding,
+        vertical: isTablet ? 12 : 8,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool stackContent = constraints.maxWidth < 420;
+          final Widget analysisButton = SizedBox(
+            width: stackContent ? double.infinity : null,
             child: ElevatedButton.icon(
               onPressed: isLoading ? null : onGenerateAnalysis,
               icon: isLoading
@@ -888,7 +967,7 @@ class _QuickActionsBar extends StatelessWidget {
                 backgroundColor: adjustOpacity(Colors.tealAccent, 0.12),
                 foregroundColor: Colors.tealAccent,
                 padding: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 24 : 16,
+                  horizontal: isTablet ? 24 : (stackContent ? 18 : 16),
                   vertical: isTablet ? 14 : 12,
                 ),
                 shape: RoundedRectangleBorder(
@@ -898,10 +977,12 @@ class _QuickActionsBar extends StatelessWidget {
                 elevation: 0,
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
+          );
+          final Widget messageCounter = Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: stackContent ? 8 : 12,
+            ),
             decoration: BoxDecoration(
               color: adjustOpacity(Colors.blueAccent, 0.12),
               borderRadius: BorderRadius.circular(12),
@@ -911,12 +992,34 @@ class _QuickActionsBar extends StatelessWidget {
               '$messageCount mensajes',
               style: GoogleFonts.poppins(
                 color: Colors.blueAccent,
-                fontSize: 12,
+                fontSize: stackContent ? 11 : 12,
                 fontWeight: FontWeight.w500,
               ),
             ),
-          ),
-        ],
+          );
+
+          if (stackContent) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                analysisButton,
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.center,
+                  child: messageCounter,
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: analysisButton),
+              const SizedBox(width: 12),
+              messageCounter,
+            ],
+          );
+        },
       ),
     ).animate().fadeIn(duration: 300.ms);
   }
@@ -928,6 +1031,8 @@ class _MessageInputBar extends StatelessWidget {
     required this.isLandscape,
     required this.isLoading,
     required this.isTablet,
+    required this.outerMargin,
+    required this.innerPadding,
     required this.onSend,
   });
 
@@ -935,16 +1040,16 @@ class _MessageInputBar extends StatelessWidget {
   final bool isLandscape;
   final bool isLoading;
   final bool isTablet;
+  final EdgeInsets outerMargin;
+  final EdgeInsets innerPadding;
   final VoidCallback onSend;
 
   @override
   Widget build(BuildContext context) {
+    final bool allowMultiLine = isLandscape || !isTablet;
     return Container(
-      margin: EdgeInsets.all(isTablet ? 24 : 16),
-      padding: EdgeInsets.symmetric(
-        horizontal: isTablet ? 24 : 16,
-        vertical: isTablet ? 16 : 8,
-      ),
+      margin: outerMargin,
+      padding: innerPadding,
       decoration: BoxDecoration(
         color: adjustOpacity(Colors.black, 0.45),
         borderRadius: BorderRadius.circular(16),
@@ -956,7 +1061,7 @@ class _MessageInputBar extends StatelessWidget {
             child: TextField(
               controller: controller,
               style: GoogleFonts.poppins(color: Colors.white),
-              maxLines: isLandscape ? 2 : 1,
+              maxLines: allowMultiLine ? 2 : 1,
               decoration: InputDecoration(
                 hintText: 'Pregunta sobre tu sistema de domotica...',
                 hintStyle: GoogleFonts.poppins(
@@ -965,8 +1070,8 @@ class _MessageInputBar extends StatelessWidget {
                 ),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 20 : 16,
-                  vertical: isTablet ? 16 : 12,
+                  horizontal: 0,
+                  vertical: allowMultiLine ? 8 : 12,
                 ),
               ),
               onSubmitted: (_) {

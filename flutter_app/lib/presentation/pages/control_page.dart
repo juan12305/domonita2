@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/sensor_data.dart';
 import '../controllers/sensor_controller.dart';
@@ -48,6 +49,30 @@ class ControlPage extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isCompact = constraints.maxWidth < 720;
+            final double topSpacing = isCompact ? 12.0 : 16.0;
+            final double spacingAfterStatus = isCompact ? 20.0 : 30.0;
+            final double spacingAfterSensors = isCompact ? 24.0 : 36.0;
+
+            final Widget sensorContent = sensorData != null
+                ? _SensorOverview(
+                    data: sensorData,
+                    isBright: isBright,
+                    isCompact: isCompact,
+                  )
+                : const _WaitingData();
+            final Widget actionPanel = _ActionPanel(
+              isAutoMode: isAutoMode,
+              isCompact: isCompact,
+              onToggleAuto: (_) => controller.toggleAutoMode(),
+              onLedOn: connected ? controller.turnLedOn : null,
+              onLedOff: connected ? controller.turnLedOff : null,
+              onFanOn: connected ? controller.turnFanOn : null,
+              onFanOff: connected ? controller.turnFanOff : null,
+              onHistory: () => Navigator.of(context).pushNamed('/history'),
+              onAiChat: () => Navigator.of(context).pushNamed('/ai_chat'),
+            );
+            final Widget statusBanner = _ConnectionStatus(connected: connected);
+
             return Stack(
               fit: StackFit.expand,
               children: [
@@ -58,34 +83,53 @@ class ControlPage extends StatelessWidget {
                   decoration: BoxDecoration(
                     gradient: isBright ? _dayGradient : _nightGradient,
                   ),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 16),
-                      _ConnectionStatus(connected: connected),
-                      const SizedBox(height: 30),
-                      Expanded(
-                        child: sensorData != null
-                            ? _SensorOverview(
-                                data: sensorData,
-                                isBright: isBright,
-                                isCompact: isCompact,
-                              )
-                            : const _WaitingData(),
-                      ),
-                      _ActionPanel(
-                        isAutoMode: isAutoMode,
-                        isCompact: isCompact,
-                        onToggleAuto: (_) => controller.toggleAutoMode(),
-                        onLedOn: connected ? controller.turnLedOn : null,
-                        onLedOff: connected ? controller.turnLedOff : null,
-                        onFanOn: connected ? controller.turnFanOn : null,
-                        onFanOff: connected ? controller.turnFanOff : null,
-                        onHistory: () =>
-                            Navigator.of(context).pushNamed('/history'),
-                        onAiChat: () =>
-                            Navigator.of(context).pushNamed('/ai_chat'),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isCompact ? 16.0 : 32.0,
+                      vertical: isCompact ? 16.0 : 24.0,
+                    ),
+                    child: isCompact
+                        ? SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SizedBox(height: topSpacing),
+                                statusBanner,
+                                SizedBox(height: spacingAfterStatus),
+                                Center(child: sensorContent),
+                                SizedBox(height: spacingAfterSensors),
+                                actionPanel,
+                              ],
+                            ),
+                          )
+                        : Column(
+                            children: [
+                              SizedBox(height: topSpacing),
+                              statusBanner,
+                              SizedBox(height: spacingAfterStatus),
+                              Expanded(
+                                child: Center(child: sensorContent),
+                              ),
+                              SizedBox(height: spacingAfterSensors),
+                              actionPanel,
+                            ],
+                          ),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: _TopMenu(
+                    onLogout: () async {
+                      try {
+                        await Supabase.instance.client.auth.signOut();
+                      } catch (_) {
+                        // ignore errors; navigation proceeds regardless
+                      }
+                      Navigator.of(context)
+                          .pushNamedAndRemoveUntil('/login', (route) => false);
+                    },
                   ),
                 ),
               ],
@@ -127,6 +171,56 @@ class _ConnectionStatus extends StatelessWidget {
   }
 }
 
+class _TopMenu extends StatelessWidget {
+  const _TopMenu({required this.onLogout});
+
+  final Future<void> Function() onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_ControlMenuAction>(
+      tooltip: 'Abrir menú',
+      color: adjustOpacity(Colors.black, 0.85),
+      offset: const Offset(-4, 8),
+      icon: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: adjustOpacity(Colors.black, 0.25),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: adjustOpacity(Colors.white, 0.15)),
+        ),
+        child: const Icon(Icons.more_vert, color: Colors.white),
+      ),
+      itemBuilder: (context) => [
+        PopupMenuItem<_ControlMenuAction>(
+          value: _ControlMenuAction.logout,
+          child: Row(
+            children: [
+              const Icon(Icons.logout_rounded, color: Colors.redAccent),
+              const SizedBox(width: 8),
+              Text(
+                'Cerrar sesión',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      onSelected: (action) async {
+        switch (action) {
+          case _ControlMenuAction.logout:
+            await onLogout();
+            break;
+        }
+      },
+    );
+  }
+}
+
 class _SensorOverview extends StatelessWidget {
   const _SensorOverview({
     required this.data,
@@ -140,13 +234,16 @@ class _SensorOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final spacing = isCompact ? 24.0 : 32.0;
+    final double spacing = isCompact ? 16.0 : 32.0;
+    final double runSpacing = isCompact ? 16.0 : 32.0;
+    final double indicatorSpacing = isCompact ? 24.0 : 36.0;
+    final double gaugeScale = isCompact ? 0.9 : 1.0;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Wrap(
           spacing: spacing,
-          runSpacing: spacing,
+          runSpacing: runSpacing,
           alignment: WrapAlignment.center,
           children: [
             _buildGaugeWithHalo(
@@ -157,6 +254,7 @@ class _SensorOverview extends StatelessWidget {
               color: Colors.orangeAccent,
               icon: Icons.thermostat,
               haloColor: adjustOpacity(Colors.orangeAccent, 0.35),
+              scale: gaugeScale,
             ),
             _buildGaugeWithHalo(
               title: 'Humedad',
@@ -168,11 +266,12 @@ class _SensorOverview extends StatelessWidget {
               haloColor: isBright
                   ? adjustOpacity(Colors.white, 0.25)
                   : adjustOpacity(Colors.blueAccent, 0.3),
+              scale: gaugeScale,
             ),
           ],
         ),
-        const SizedBox(height: 36),
-        _buildLightIndicator(data.light),
+        SizedBox(height: indicatorSpacing),
+        _buildLightIndicator(data.light, isCompact: isCompact),
       ],
     );
   }
@@ -221,7 +320,10 @@ class _ActionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 12.0 : 20.0,
+        vertical: isCompact ? 12.0 : 16.0,
+      ),
       child: Column(
         children: [
           Row(
@@ -258,10 +360,11 @@ class _ActionPanel extends StatelessWidget {
             LayoutBuilder(
               builder: (context, constraints) {
                 final maxWidth = constraints.maxWidth;
+                final double spacing = isCompact ? 12.0 : 16.0;
                 final buttonWidth =
-                    isCompact ? maxWidth : (maxWidth - 16) / 2;
+                    isCompact ? maxWidth : (maxWidth - spacing) / 2;
                 return Wrap(
-                  spacing: 16,
+                  spacing: spacing,
                   runSpacing: 12,
                   alignment: WrapAlignment.center,
                   children: [
@@ -310,9 +413,10 @@ class _ActionPanel extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final maxWidth = constraints.maxWidth;
-              final buttonWidth = isCompact ? maxWidth : (maxWidth - 16) / 2;
+              final double spacing = isCompact ? 12.0 : 16.0;
+              final buttonWidth = isCompact ? maxWidth : (maxWidth - spacing) / 2;
               return Wrap(
-                spacing: 16,
+                spacing: spacing,
                 runSpacing: 12,
                 alignment: WrapAlignment.center,
                 children: [
@@ -352,6 +456,7 @@ Widget _buildGaugeWithHalo({
   required Color color,
   required IconData icon,
   required Color haloColor,
+  double scale = 1.0,
 }) {
   return Container(
     decoration: BoxDecoration(
@@ -359,8 +464,8 @@ Widget _buildGaugeWithHalo({
       boxShadow: [
         BoxShadow(
           color: haloColor,
-          blurRadius: 40,
-          spreadRadius: 12,
+          blurRadius: 40 * scale,
+          spreadRadius: 12 * scale,
         ),
       ],
     ),
@@ -371,6 +476,7 @@ Widget _buildGaugeWithHalo({
       unit: unit,
       color: color,
       icon: icon,
+      scale: scale,
     ),
   );
 }
@@ -382,10 +488,16 @@ Widget _buildGauge({
   required String unit,
   required Color color,
   required IconData icon,
+  double scale = 1.0,
 }) {
+  final double width = 170 * scale;
+  final double height = 220 * scale;
+  final double iconSize = 36 * scale;
+  final double valueFontSize = 24 * scale;
+  final double titleFontSize = 16 * scale;
   return SizedBox(
-    height: 220,
-    width: 170,
+    height: height,
+    width: width,
     child: SfRadialGauge(
       enableLoadingAnimation: true,
       animationDuration: 1000,
@@ -414,13 +526,13 @@ Widget _buildGauge({
               widget: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, color: color, size: 36),
-                  const SizedBox(height: 10),
+                  Icon(icon, color: color, size: iconSize),
+                  SizedBox(height: 10 * scale),
                   Text(
                     '${value.toStringAsFixed(1)}$unit',
                     style: GoogleFonts.poppins(
                       color: color,
-                      fontSize: 24,
+                      fontSize: valueFontSize,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -428,7 +540,7 @@ Widget _buildGauge({
                     title,
                     style: GoogleFonts.poppins(
                       color: Colors.white70,
-                      fontSize: 16,
+                      fontSize: titleFontSize,
                     ),
                   ),
                 ],
@@ -514,16 +626,20 @@ Widget _buildActionButton({
   );
 }
 
-Widget _buildLightIndicator(int light) {
+enum _ControlMenuAction { logout }
+
+Widget _buildLightIndicator(int light, {required bool isCompact}) {
   final bool isBright = light == 0;
   final Color color = isBright ? Colors.yellowAccent : Colors.indigoAccent;
   final String status = isBright ? 'Mucha luz' : 'Poca luz';
   final IconData icon =
       isBright ? Icons.wb_sunny_rounded : Icons.nightlight_round;
+  final double scale = isCompact ? 0.82 : 1.0;
+  final double size = 220 * scale;
 
   return Container(
-    height: 220,
-    width: 220,
+    height: size,
+    width: size,
     decoration: BoxDecoration(
       shape: BoxShape.circle,
       gradient: RadialGradient(
@@ -532,12 +648,15 @@ Widget _buildLightIndicator(int light) {
           adjustOpacity(color, isBright ? 0.15 : 0.1),
         ],
       ),
-      border: Border.all(color: adjustOpacity(Colors.white, 0.12), width: 2),
+      border: Border.all(
+        color: adjustOpacity(Colors.white, 0.12),
+        width: 2 * scale,
+      ),
       boxShadow: [
         BoxShadow(
           color: adjustOpacity(color, 0.5),
-          blurRadius: isBright ? 30 : 10,
-          spreadRadius: isBright ? 10 : 2,
+          blurRadius: (isBright ? 30 : 10) * scale,
+          spreadRadius: (isBright ? 10 : 2) * scale,
         ),
       ],
     ),
@@ -545,19 +664,19 @@ Widget _buildLightIndicator(int light) {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 60)
+          Icon(icon, color: color, size: 60 * scale)
               .animate(onPlay: (c) => c.repeat(reverse: true))
               .scale(
                 begin: const Offset(0.9, 0.9),
                 end: const Offset(1.1, 1.1),
                 duration: 1200.ms,
               ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12 * scale),
           Text(
             status,
             style: GoogleFonts.poppins(
               color: color,
-              fontSize: 22,
+              fontSize: 22 * scale,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -565,7 +684,7 @@ Widget _buildLightIndicator(int light) {
             'Luz ambiental',
             style: GoogleFonts.poppins(
               color: Colors.white70,
-              fontSize: 16,
+              fontSize: 16 * scale,
             ),
           ),
         ],

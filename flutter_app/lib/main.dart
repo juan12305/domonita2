@@ -28,7 +28,7 @@ void main() async {
   Hive.registerAdapter(ActuatorAdapter());
 
   // ✅ Inicializar el repositorio *antes* del runApp
-  final repository = SensorRepository(websocketUrl: 'wss://domotica-ws.onrender.com');
+  final repository = SensorRepository(websocketUrl: 'wss://flutteresp.onrender.com');
   await repository.init(); // 👈 Esperar a que la conexión WebSocket esté lista
 
   // Gemini API Key (consider using environment variables or secure storage)
