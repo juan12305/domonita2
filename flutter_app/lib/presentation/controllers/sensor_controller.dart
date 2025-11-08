@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/sensor_data.dart';
 import '../../data/repositories/sensor_repository.dart';
 import '../../data/services/gemini_service.dart';
+
+enum AiConsumptionLevel { high, medium, low }
 
 class SensorController extends ChangeNotifier {
   final SensorRepository repository;
@@ -12,17 +17,56 @@ class SensorController extends ChangeNotifier {
   DateTime? _lastDecisionTime;
   bool _isEvaluatingAutoDecision = false;
 
-  // Cache decisions briefly to avoid llamadas consecutivas al modelo
-  static const Duration _decisionCacheDuration = Duration(seconds: 15);
+  static const _prefsKeyConsumptionLevel = 'ai_consumption_level';
 
-  SensorController({required this.repository, required String geminiApiKey})
-      : geminiService = GeminiService(geminiApiKey) {
+  AiConsumptionLevel _level = AiConsumptionLevel.medium;
+  Duration _decisionCacheDuration = const Duration(seconds: 15);
+
+  SensorController({required this.repository, required this.geminiService}) {
     repository.addListener(_onRepositoryChanged);
+    unawaited(loadLevel());
   }
 
   SensorData? get sensorData => repository.lastSensorData;
   bool get connected => repository.connected;
   bool get isAutoMode => _isAutoMode;
+  AiConsumptionLevel get level => _level;
+  Duration get decisionCacheDuration => _decisionCacheDuration;
+
+  Future<void> loadLevel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_prefsKeyConsumptionLevel);
+      if (saved == null) return;
+
+      final restored = AiConsumptionLevel.values.firstWhere(
+        (level) => level.name == saved,
+        orElse: () => _level,
+      );
+      if (restored == _level) return;
+
+      _level = restored;
+      _applyLevelDuration();
+      _clearDecisionCache();
+      debugPrint(
+        'AI consumption restored to $_level ($_decisionCacheDuration)',
+      );
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to load AI consumption level: $e');
+    }
+  }
+
+  void setConsumptionLevel(AiConsumptionLevel newLevel) {
+    if (newLevel == _level) return;
+
+    _level = newLevel;
+    _applyLevelDuration();
+    _clearDecisionCache();
+    debugPrint('AI consumption set to $_level ($_decisionCacheDuration)');
+    notifyListeners();
+    unawaited(_persistLevel());
+  }
 
   void _onRepositoryChanged() {
     notifyListeners();
@@ -51,13 +95,21 @@ class SensorController extends ChangeNotifier {
   }
 
   void toggleAutoMode() {
-    _isAutoMode = !_isAutoMode;
-    // Clear cache when toggling auto mode
-    if (!_isAutoMode) {
-      _cachedDecision = null;
-      _lastDecisionTime = null;
+    setAutoMode(!_isAutoMode);
+  }
+
+  void setAutoMode(bool enabled) {
+    if (_isAutoMode == enabled) return;
+
+    _isAutoMode = enabled;
+    if (!enabled) {
+      _clearDecisionCache();
       debugPrint('Cleared AI decision cache when disabling auto mode');
+    } else {
+      debugPrint('Auto mode enabled');
     }
+
+    repository.setAutoMode(enabled);
     notifyListeners();
   }
 
@@ -112,5 +164,33 @@ class SensorController extends ChangeNotifier {
   void dispose() {
     repository.removeListener(_onRepositoryChanged);
     super.dispose();
+  }
+
+  void _applyLevelDuration() {
+    switch (_level) {
+      case AiConsumptionLevel.high:
+        _decisionCacheDuration = const Duration(seconds: 10);
+        break;
+      case AiConsumptionLevel.medium:
+        _decisionCacheDuration = const Duration(seconds: 15);
+        break;
+      case AiConsumptionLevel.low:
+        _decisionCacheDuration = const Duration(seconds: 25);
+        break;
+    }
+  }
+
+  void _clearDecisionCache() {
+    _cachedDecision = null;
+    _lastDecisionTime = null;
+  }
+
+  Future<void> _persistLevel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKeyConsumptionLevel, _level.name);
+    } catch (e) {
+      debugPrint('Failed to persist AI consumption level: $e');
+    }
   }
 }

@@ -7,20 +7,28 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:domotica_app/data/repositories/sensor_repository.dart';
+import 'package:domotica_app/data/services/gemini_service.dart';
+import 'package:domotica_app/data/services/voice_command_service.dart';
 import 'package:domotica_app/domain/sensor_data.dart';
 import 'package:domotica_app/main.dart';
+import 'package:domotica_app/services/prompt_repository.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     final repository = _FakeSensorRepository();
+    SharedPreferences.setMockInitialValues({});
+    final geminiService = _StubGeminiService();
+    final voiceService = VoiceCommandService('test-api-key');
 
     await tester.pumpWidget(
       MyApp(
         repository: repository,
-        geminiApiKey: 'test-api-key',
+        geminiService: geminiService,
+        voiceService: voiceService,
       ),
     );
 
@@ -52,4 +60,36 @@ class _FakeSensorRepository extends SensorRepository {
 
   @override
   void sendFanOff() {}
+}
+
+class _StubPromptRepository extends PromptRepository {
+  @override
+  Future<void> init() async {}
+
+  @override
+  String render(String key, Map<String, String> vars) => '';
+}
+
+class _StubGeminiService extends GeminiService {
+  _StubGeminiService() : super('test-api-key', _StubPromptRepository());
+
+  @override
+  Future<Map<String, String>> getAutoDecision(SensorData data) async => {
+    'light_action': 'OFF',
+    'fan_action': 'OFF',
+    'reason': 'stub',
+  };
+
+  @override
+  Future<String> generateAnalysis(List<SensorData> data) async =>
+      'stub analysis';
+
+  @override
+  Future<Map<String, dynamic>?> chatResponse(
+    String userMessage,
+    List<String> history, {
+    List<SensorData>? sensorData,
+  }) async {
+    return {'response': 'stub response', 'actions': const <String>[]};
+  }
 }

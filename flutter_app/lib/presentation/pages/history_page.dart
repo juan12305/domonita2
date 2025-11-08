@@ -8,6 +8,7 @@ import '../../domain/sensor_data.dart';
 import '../controllers/sensor_controller.dart';
 import '../widgets/particle_field.dart';
 import '../theme/color_utils.dart';
+import 'dashboard_page.dart';
 
 class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key});
@@ -38,7 +39,7 @@ class HistoryPage extends StatelessWidget {
     final data = controller.sensorData;
     final connected = controller.connected;
     final allData = controller.repository.allSensorData;
-    final bool isBright = data == null ? true : data.light == 0;
+    final isBright = data == null ? true : data.light == 0;
     final gradient = isBright ? _dayGradient : _nightGradient;
 
     return Scaffold(
@@ -72,7 +73,17 @@ class HistoryPage extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ).animate().fadeIn(duration: 700.ms),
-                        const SizedBox(width: 48),
+                        IconButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const DashboardPage(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.bar_chart_rounded,
+                              color: Colors.white, size: 32),
+                        ).animate().scale(duration: 400.ms),
                       ],
                     ),
                   ),

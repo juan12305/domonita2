@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'data/repositories/sensor_repository.dart';
+import 'data/services/gemini_service.dart';
+import 'data/services/voice_command_service.dart';
 import 'domain/sensor_data.dart';
 import 'domain/actuator.dart';
 import 'presentation/controllers/sensor_controller.dart';
@@ -12,14 +15,19 @@ import 'presentation/pages/register_page.dart';
 import 'presentation/pages/login_page.dart';
 import 'presentation/pages/history_page.dart';
 import 'presentation/pages/ai_chat_page.dart';
+import 'presentation/pages/voice_control_page.dart';
+import 'services/prompt_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Load environment variables
+  await dotenv.load(fileName: ".env");
+
   // Inicializar Supabase
   await Supabase.initialize(
-    url: 'https://ujlssaucwnaunizxqphg.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqbHNzYXVjd25hdW5penhxcGhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzNjk3OTEsImV4cCI6MjA3NTk0NTc5MX0.j9j-evd2nvdCApNCAfiUZnXIEq7hi6WmqjviZawxttg',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
   // Inicializar Hive
@@ -27,21 +35,38 @@ void main() async {
   Hive.registerAdapter(SensorDataAdapter());
   Hive.registerAdapter(ActuatorAdapter());
 
-  // ✅ Inicializar el repositorio *antes* del runApp
-  final repository = SensorRepository(websocketUrl: 'wss://flutteresp.onrender.com');
-  await repository.init(); // 👈 Esperar a que la conexión WebSocket esté lista
+  // Inicializar el repositorio
+  final repository = SensorRepository(
+    websocketUrl: dotenv.env['WEBSOCKET_URL']!,
+  );
+  await repository.init();
 
-  // Gemini API Key (consider using environment variables or secure storage)
-  const String geminiApiKey = 'AIzaSyBgeAP1A2L8y7JUHnjw8-GQDPAnD_ilyJE';
+  // Gemini API Key from environment
+  final String geminiApiKey = dotenv.env['GEMINI_API_KEY']!;
 
-  runApp(MyApp(repository: repository, geminiApiKey: geminiApiKey));
+  final prompts = PromptRepository();
+  await prompts.init();
+  final geminiService = GeminiService(geminiApiKey, prompts);
+  final voiceService = VoiceCommandService(geminiApiKey);
+
+  runApp(MyApp(
+    repository: repository,
+    geminiService: geminiService,
+    voiceService: voiceService,
+  ));
 }
 
 class MyApp extends StatelessWidget {
   final SensorRepository repository;
-  final String geminiApiKey;
+  final GeminiService geminiService;
+  final VoiceCommandService voiceService;
 
-  const MyApp({super.key, required this.repository, required this.geminiApiKey});
+  const MyApp({
+    super.key,
+    required this.repository,
+    required this.geminiService,
+    required this.voiceService,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +77,10 @@ class MyApp extends StatelessWidget {
 
         // Controlador dependiente del repositorio
         ChangeNotifierProvider(
-          create: (_) => SensorController(repository: repository, geminiApiKey: geminiApiKey),
+          create: (_) => SensorController(
+            repository: repository,
+            geminiService: geminiService,
+          ),
         ),
       ],
       child: MaterialApp(
@@ -79,6 +107,7 @@ class MyApp extends StatelessWidget {
           '/control': (context) => const ControlPage(),
           '/history': (context) => const HistoryPage(),
           '/ai_chat': (context) => const AiChatPage(),
+          '/voice_control': (context) => VoiceControlPage(voiceService: voiceService),
         },
       ),
     );

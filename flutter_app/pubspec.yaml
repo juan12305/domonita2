@@ -47,9 +47,23 @@ dependencies:
   syncfusion_flutter_gauges: ^31.1.23
   google_fonts: ^6.3.2
   intl: ^0.19.0
+  shared_preferences: ^2.3.2
 
   # Google Gemini AI
   google_generative_ai: ^0.4.7
+
+  # Charts
+  fl_chart: ^0.69.2
+  syncfusion_flutter_charts: ^31.1.23
+
+  # Voice Control
+  speech_to_text: ^7.0.0
+  permission_handler: ^11.3.1
+  local_auth: ^2.1.8
+  flutter_secure_storage: ^9.2.2
+
+  # Environment Variables
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   hive_generator: ^2.0.1
@@ -68,6 +82,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/prompts/prompts.json
+    - .env
 
   # To add assets to your application, add an assets section, like this:
   # assets:

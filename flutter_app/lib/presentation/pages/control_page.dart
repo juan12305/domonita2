@@ -14,21 +14,13 @@ class ControlPage extends StatelessWidget {
   const ControlPage({super.key});
 
   static const LinearGradient _dayGradient = LinearGradient(
-    colors: [
-      Color(0xFF56CCF2),
-      Color(0xFF2F80ED),
-      Color(0xFF6DD5FA),
-    ],
+    colors: [Color(0xFF56CCF2), Color(0xFF2F80ED), Color(0xFF6DD5FA)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient _nightGradient = LinearGradient(
-    colors: [
-      Color(0xFF1A1A2E),
-      Color(0xFF16213E),
-      Color(0xFF0F3460),
-    ],
+    colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -36,12 +28,21 @@ class ControlPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.read<SensorController>();
-    final sensorData =
-        context.select<SensorController, SensorData?>((c) => c.sensorData);
-    final connected =
-        context.select<SensorController, bool>((c) => c.connected);
-    final isAutoMode =
-        context.select<SensorController, bool>((c) => c.isAutoMode);
+    final sensorData = context.select<SensorController, SensorData?>(
+      (c) => c.sensorData,
+    );
+    final connected = context.select<SensorController, bool>(
+      (c) => c.connected,
+    );
+    final isAutoMode = context.select<SensorController, bool>(
+      (c) => c.isAutoMode,
+    );
+    final level = context.select<SensorController, AiConsumptionLevel>(
+      (c) => c.level,
+    );
+    final decisionDuration = context.select<SensorController, Duration>(
+      (c) => c.decisionCacheDuration,
+    );
     final isBright = sensorData?.light == 0;
 
     return Scaffold(
@@ -49,29 +50,30 @@ class ControlPage extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isCompact = constraints.maxWidth < 720;
-            final double topSpacing = isCompact ? 12.0 : 16.0;
-            final double spacingAfterStatus = isCompact ? 20.0 : 30.0;
-            final double spacingAfterSensors = isCompact ? 24.0 : 36.0;
+            final topSpacing = isCompact ? 12.0 : 16.0;
+            final spacingAfterStatus = isCompact ? 20.0 : 30.0;
+            final spacingAfterSensors = isCompact ? 24.0 : 36.0;
 
-            final Widget sensorContent = sensorData != null
+            final sensorContent = sensorData != null
                 ? _SensorOverview(
                     data: sensorData,
                     isBright: isBright,
                     isCompact: isCompact,
                   )
                 : const _WaitingData();
-            final Widget actionPanel = _ActionPanel(
+            final actionPanel = _ActionPanel(
               isAutoMode: isAutoMode,
               isCompact: isCompact,
-              onToggleAuto: (_) => controller.toggleAutoMode(),
+              onToggleAuto: controller.setAutoMode,
               onLedOn: connected ? controller.turnLedOn : null,
               onLedOff: connected ? controller.turnLedOff : null,
               onFanOn: connected ? controller.turnFanOn : null,
               onFanOff: connected ? controller.turnFanOff : null,
               onHistory: () => Navigator.of(context).pushNamed('/history'),
               onAiChat: () => Navigator.of(context).pushNamed('/ai_chat'),
+              onVoiceControl: () => Navigator.of(context).pushNamed('/voice_control'),
             );
-            final Widget statusBanner = _ConnectionStatus(connected: connected);
+            final statusBanner = _ConnectionStatus(connected: connected);
 
             return Stack(
               fit: StackFit.expand,
@@ -108,9 +110,7 @@ class ControlPage extends StatelessWidget {
                               SizedBox(height: topSpacing),
                               statusBanner,
                               SizedBox(height: spacingAfterStatus),
-                              Expanded(
-                                child: Center(child: sensorContent),
-                              ),
+                              Expanded(child: Center(child: sensorContent)),
                               SizedBox(height: spacingAfterSensors),
                               actionPanel,
                             ],
@@ -121,14 +121,21 @@ class ControlPage extends StatelessWidget {
                   top: 12,
                   right: 12,
                   child: _TopMenu(
+                    currentLevel: level,
+                    decisionDuration: decisionDuration,
+                    onLevelChanged: controller.setConsumptionLevel,
                     onLogout: () async {
                       try {
                         await Supabase.instance.client.auth.signOut();
                       } catch (_) {
                         // ignore errors; navigation proceeds regardless
                       }
-                      Navigator.of(context)
-                          .pushNamedAndRemoveUntil('/login', (route) => false);
+                      if (!context.mounted) {
+                        return;
+                      }
+                      Navigator.of(
+                        context,
+                      ).pushNamedAndRemoveUntil('/login', (route) => false);
                     },
                   ),
                 ),
@@ -172,14 +179,22 @@ class _ConnectionStatus extends StatelessWidget {
 }
 
 class _TopMenu extends StatelessWidget {
-  const _TopMenu({required this.onLogout});
+  const _TopMenu({
+    required this.currentLevel,
+    required this.decisionDuration,
+    required this.onLevelChanged,
+    required this.onLogout,
+  });
 
+  final AiConsumptionLevel currentLevel;
+  final Duration decisionDuration;
+  final ValueChanged<AiConsumptionLevel> onLevelChanged;
   final Future<void> Function() onLogout;
 
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<_ControlMenuAction>(
-      tooltip: 'Abrir menú',
+      tooltip: 'Abrir menu',
       color: adjustOpacity(Colors.black, 0.85),
       offset: const Offset(-4, 8),
       icon: Container(
@@ -192,6 +207,25 @@ class _TopMenu extends StatelessWidget {
         child: const Icon(Icons.more_vert, color: Colors.white),
       ),
       itemBuilder: (context) => [
+        PopupMenuItem<_ControlMenuAction>(
+          value: _ControlMenuAction.settings,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.tune, color: Colors.tealAccent),
+            title: Text(
+              'Consumo de IA',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            subtitle: Text(
+              'Actual: cada ${decisionDuration.inSeconds}s',
+              style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12),
+            ),
+          ),
+        ),
         PopupMenuItem<_ControlMenuAction>(
           value: _ControlMenuAction.logout,
           child: Row(
@@ -212,12 +246,101 @@ class _TopMenu extends StatelessWidget {
       ],
       onSelected: (action) async {
         switch (action) {
+          case _ControlMenuAction.settings:
+            final selected = await _showSettingsDialog(context);
+            if (selected != null && selected != currentLevel) {
+              onLevelChanged(selected);
+            }
+            break;
           case _ControlMenuAction.logout:
             await onLogout();
             break;
         }
       },
     );
+  }
+
+  Future<AiConsumptionLevel?> _showSettingsDialog(BuildContext context) {
+    return showDialog<AiConsumptionLevel>(
+      context: context,
+      builder: (dialogContext) {
+        AiConsumptionLevel selectedLevel = currentLevel;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Consumo de IA'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButton<AiConsumptionLevel>(
+                    value: selectedLevel,
+                    isExpanded: true,
+                    dropdownColor: Colors.black87,
+                    iconEnabledColor: Colors.white,
+                    style: GoogleFonts.poppins(color: Colors.white),
+                    items: AiConsumptionLevel.values
+                        .map(
+                          (level) => DropdownMenuItem<AiConsumptionLevel>(
+                            value: level,
+                            child: Text(_labelForLevel(level)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => selectedLevel = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Frecuencia: cada ${_durationForLevel(selectedLevel).inSeconds}s',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white70,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () =>
+                      Navigator.of(dialogContext).pop(selectedLevel),
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static Duration _durationForLevel(AiConsumptionLevel level) {
+    switch (level) {
+      case AiConsumptionLevel.high:
+        return const Duration(seconds: 10);
+      case AiConsumptionLevel.medium:
+        return const Duration(seconds: 15);
+      case AiConsumptionLevel.low:
+        return const Duration(seconds: 25);
+    }
+  }
+
+  static String _labelForLevel(AiConsumptionLevel level) {
+    switch (level) {
+      case AiConsumptionLevel.high:
+        return 'Alto';
+      case AiConsumptionLevel.medium:
+        return 'Medio';
+      case AiConsumptionLevel.low:
+        return 'Bajo';
+    }
   }
 }
 
@@ -285,10 +408,7 @@ class _WaitingData extends StatelessWidget {
     return Center(
       child: Text(
         'Esperando datos del sensor...',
-        style: GoogleFonts.poppins(
-          color: Colors.white70,
-          fontSize: 16,
-        ),
+        style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
       ),
     );
   }
@@ -305,6 +425,7 @@ class _ActionPanel extends StatelessWidget {
     this.onFanOff,
     required this.onHistory,
     required this.onAiChat,
+    required this.onVoiceControl,
   });
 
   final bool isAutoMode;
@@ -316,6 +437,7 @@ class _ActionPanel extends StatelessWidget {
   final VoidCallback? onFanOff;
   final VoidCallback onHistory;
   final VoidCallback onAiChat;
+  final VoidCallback onVoiceControl;
 
   @override
   Widget build(BuildContext context) {
@@ -361,8 +483,9 @@ class _ActionPanel extends StatelessWidget {
               builder: (context, constraints) {
                 final maxWidth = constraints.maxWidth;
                 final double spacing = isCompact ? 12.0 : 16.0;
-                final buttonWidth =
-                    isCompact ? maxWidth : (maxWidth - spacing) / 2;
+                final buttonWidth = isCompact
+                    ? maxWidth
+                    : (maxWidth - spacing) / 2;
                 return Wrap(
                   spacing: spacing,
                   runSpacing: 12,
@@ -414,7 +537,9 @@ class _ActionPanel extends StatelessWidget {
             builder: (context, constraints) {
               final maxWidth = constraints.maxWidth;
               final double spacing = isCompact ? 12.0 : 16.0;
-              final buttonWidth = isCompact ? maxWidth : (maxWidth - spacing) / 2;
+              final buttonWidth = isCompact
+                  ? maxWidth
+                  : (maxWidth - spacing) / 2;
               return Wrap(
                 spacing: spacing,
                 runSpacing: 12,
@@ -436,6 +561,15 @@ class _ActionPanel extends StatelessWidget {
                       label: 'Asistente IA',
                       color: Colors.tealAccent,
                       onPressed: onAiChat,
+                    ),
+                  ),
+                  SizedBox(
+                    width: buttonWidth,
+                    child: _buildActionButton(
+                      icon: Icons.mic,
+                      label: 'Control por Voz',
+                      color: Colors.pinkAccent,
+                      onPressed: onVoiceControl,
                     ),
                   ),
                 ],
@@ -600,11 +734,7 @@ Widget _buildActionButton({
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  icon,
-                  color: effectiveColor,
-                  size: 24,
-                ),
+                Icon(icon, color: effectiveColor, size: 24),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
@@ -626,14 +756,15 @@ Widget _buildActionButton({
   );
 }
 
-enum _ControlMenuAction { logout }
+enum _ControlMenuAction { settings, logout }
 
 Widget _buildLightIndicator(int light, {required bool isCompact}) {
   final bool isBright = light == 0;
   final Color color = isBright ? Colors.yellowAccent : Colors.indigoAccent;
   final String status = isBright ? 'Mucha luz' : 'Poca luz';
-  final IconData icon =
-      isBright ? Icons.wb_sunny_rounded : Icons.nightlight_round;
+  final IconData icon = isBright
+      ? Icons.wb_sunny_rounded
+      : Icons.nightlight_round;
   final double scale = isCompact ? 0.82 : 1.0;
   final double size = 220 * scale;
 

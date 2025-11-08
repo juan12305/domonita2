@@ -200,6 +200,18 @@ class SensorRepository extends ChangeNotifier {
     }
   }
 
+  void setAutoMode(bool enabled) async {
+    debugPrint('setAutoMode called (enabled=$enabled), connected: $_connected');
+    if (!_connected) {
+      debugPrint('Not connected, cannot send AUTO mode command');
+      return;
+    }
+
+    final command = enabled ? 'AUTO_ON' : 'AUTO_OFF';
+    debugPrint('Sending $command');
+    _channel.sink.add(command);
+  }
+
   @override
   void dispose() {
     _channel.sink.close();

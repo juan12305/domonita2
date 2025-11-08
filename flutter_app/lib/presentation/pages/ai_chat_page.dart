@@ -153,7 +153,48 @@ class _AiChatPageState extends State<AiChatPage> {
 
       final actions = responseData['actions'] as List<dynamic>? ?? [];
       final controller = Provider.of<SensorController>(context, listen: false);
+      final normalizedMessage = _stripDiacritics(message.toLowerCase());
+      final _AutoIntent autoIntent = _detectAutoIntent(normalizedMessage);
+      final bool userForcedAutoOn = autoIntent == _AutoIntent.on;
+      final bool userForcedAutoOff = autoIntent == _AutoIntent.off;
+      var userMentionsFan = _containsAny(normalizedMessage, ['ventilador', 'fan']);
+      var userMentionsLight =
+          _containsAny(normalizedMessage, ['bombillo', 'luz', 'light']);
+      final bool restrictToAutoOnly =
+          autoIntent != _AutoIntent.none && !userMentionsFan && !userMentionsLight;
+
       var executedAction = false;
+      final executedMessages = <String>[];
+
+      void addExecutedMessage(String text) {
+        if (!executedMessages.contains(text)) {
+          executedMessages.add(text);
+        }
+      }
+
+      if (autoIntent == _AutoIntent.on) {
+        controller.setAutoMode(true);
+        addExecutedMessage('Modo automatico activado.');
+        executedAction = true;
+      } else if (autoIntent == _AutoIntent.off) {
+        controller.setAutoMode(false);
+        addExecutedMessage('Modo automatico desactivado.');
+        executedAction = true;
+      }
+
+      final userHandledMessages = _handleNaturalLanguageIntent(
+        message,
+        controller,
+      );
+      if (userHandledMessages.isNotEmpty) {
+        for (final msg in userHandledMessages) {
+          addExecutedMessage(msg);
+          if (msg.contains('Bombillo')) userMentionsLight = true;
+          if (msg.contains('Ventilador')) userMentionsFan = true;
+        }
+        executedAction = true;
+      }
+
       for (final dynamic rawAction in actions) {
         final actionValue = _normalizeAction(rawAction);
         if (actionValue == null) {
@@ -162,6 +203,35 @@ class _AiChatPageState extends State<AiChatPage> {
         }
 
         final action = actionValue.toUpperCase();
+        if (restrictToAutoOnly &&
+            (action.contains('LIGHT') || action.contains('LED') || action.contains('FAN'))) {
+          debugPrint(
+            'AiChatPage: Skipping $action because user requested only auto mode change',
+          );
+          continue;
+        }
+
+        if (_looksLikeAutoModeOnAction(action)) {
+          if (userForcedAutoOff) {
+            debugPrint('AiChatPage: Skipping $action because user requested AUTO OFF');
+            continue;
+          }
+          controller.setAutoMode(true);
+          addExecutedMessage('Modo automatico activado.');
+          executedAction = true;
+          continue;
+        }
+        if (_looksLikeAutoModeOffAction(action)) {
+          if (userForcedAutoOn) {
+            debugPrint('AiChatPage: Skipping $action because user requested AUTO ON');
+            continue;
+          }
+          controller.setAutoMode(false);
+          addExecutedMessage('Modo automatico desactivado.');
+          executedAction = true;
+          continue;
+        }
+
         debugPrint('AiChatPage: Executing action $action');
         switch (action) {
           case 'TURN_LED_ON':
@@ -169,6 +239,8 @@ class _AiChatPageState extends State<AiChatPage> {
           case 'LED_ON':
           case 'LIGHT_ON':
             controller.turnLedOn();
+            addExecutedMessage('Bombillo encendido.');
+            userMentionsLight = true;
             executedAction = true;
             break;
           case 'TURN_LED_OFF':
@@ -180,12 +252,16 @@ class _AiChatPageState extends State<AiChatPage> {
           case 'APAGAR BOMBILLO':
           case 'TURN OFF THE LIGHT':
             controller.turnLedOff();
+            addExecutedMessage('Bombillo apagado.');
+            userMentionsLight = true;
             executedAction = true;
             break;
           case 'TURN_FAN_ON':
           case 'FAN_ON':
           case 'TURN_ON_FAN':
             controller.turnFanOn();
+            addExecutedMessage('Ventilador encendido.');
+            userMentionsFan = true;
             executedAction = true;
             break;
           case 'TURN_FAN_OFF':
@@ -195,22 +271,31 @@ class _AiChatPageState extends State<AiChatPage> {
           case 'TURN_OFF_THE_FAN':
           case 'APAGAR VENTILADOR':
             controller.turnFanOff();
+            addExecutedMessage('Ventilador apagado.');
+            userMentionsFan = true;
             executedAction = true;
             break;
           default:
-            debugPrint('AiChatPage: Unknown action "$rawAction"');
+            debugPrint('AiChatPage: Unknown action $rawAction');
         }
       }
 
       if (!executedAction) {
         final combinedText = '$message $aiResponse';
-        final handled = _handleNaturalLanguageIntent(
+        final handledMessages = _handleNaturalLanguageIntent(
           combinedText,
           controller,
         );
-        if (!handled) {
+        if (handledMessages.isEmpty) {
           debugPrint('AiChatPage: No actionable command detected.');
+        } else {
+          handledMessages.forEach(addExecutedMessage);
+          executedAction = true;
         }
+      }
+
+      if (executedMessages.isNotEmpty) {
+        aiResponse = executedMessages.join('\n');
       }
     }
 
@@ -441,7 +526,7 @@ class _AiChatPageState extends State<AiChatPage> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.history_toggle_off,
                                 color: Colors.white38,
                                 size: 48,
@@ -881,47 +966,202 @@ String? _normalizeAction(dynamic rawAction) {
   return rawAction.toString().trim();
 }
 
-bool _handleNaturalLanguageIntent(
+bool _looksLikeAutoModeOnAction(String action) {
+  if (!action.contains('AUTO')) return false;
+  return action.contains('ON') ||
+      action.contains('ENABLE') ||
+      action.contains('ACTIVA') ||
+      action.contains('START');
+}
+
+bool _looksLikeAutoModeOffAction(String action) {
+  if (!action.contains('AUTO')) return false;
+  return action.contains('OFF') ||
+      action.contains('DISABLE') ||
+      action.contains('DESACT') ||
+      action.contains('STOP');
+}
+
+enum _AutoIntent { on, off, none }
+
+_AutoIntent _detectAutoIntent(String normalized) {
+  final offPhrases = [
+    'apaga el modo auto',
+    'apaga modo auto',
+    'apaga el modo automatico',
+    'apaga modo automatico',
+    'apaga modo inteligente',
+    'apaga control automatico',
+    'desactiva el modo auto',
+    'desactiva modo auto',
+    'desactiva el modo automatico',
+    'desactiva modo automatico',
+    'deshabilita el modo auto',
+    'deshabilita modo automatico',
+    'quita el modo auto',
+    'quita modo automatico',
+    'stop auto mode',
+    'turn off auto mode',
+    'disable auto mode',
+    'auto mode off',
+    'modo auto off',
+    'modo automatico off',
+  ];
+  for (final phrase in offPhrases) {
+    if (normalized.contains(phrase)) {
+      return _AutoIntent.off;
+    }
+  }
+
+  final onPhrases = [
+    'enciende el modo auto',
+    'enciende modo auto',
+    'enciende el modo automatico',
+    'enciende modo automatico',
+    'activa el modo auto',
+    'activa modo auto',
+    'activa el modo automatico',
+    'activa modo automatico',
+    'activa modo inteligente',
+    'habilita el modo auto',
+    'habilita modo automatico',
+    'usa el modo auto',
+    'enable auto mode',
+    'turn on auto mode',
+    'start auto mode',
+    'auto mode on',
+    'modo auto on',
+    'modo automatico on',
+  ];
+  for (final phrase in onPhrases) {
+    if (normalized.contains(phrase)) {
+      return _AutoIntent.on;
+    }
+  }
+
+  final mentionsAuto = normalized.contains('modo auto') ||
+      normalized.contains('modo automatico') ||
+      normalized.contains('auto mode') ||
+      normalized.contains('automatic mode') ||
+      normalized.contains('control automatico') ||
+      normalized.contains('modo inteligente');
+
+  if (!mentionsAuto) {
+    return _AutoIntent.none;
+  }
+
+  final onKeywords = [
+    'enciende',
+    'prende',
+    'turn on',
+    'encender',
+    'activa',
+    'activar',
+    'habilita',
+    'habilitar',
+    'enable',
+  ];
+  final offKeywords = [
+    'apaga',
+    'apague',
+    'turn off',
+    'apag',
+    'desactiva',
+    'desactivar',
+    'deshabilita',
+    'deshabilitar',
+    'disable',
+    'quita',
+  ];
+
+  final wantsOn = _containsAny(normalized, onKeywords);
+  final wantsOff = _containsAny(normalized, offKeywords);
+
+  if (wantsOn && !wantsOff) return _AutoIntent.on;
+  if (wantsOff && !wantsOn) return _AutoIntent.off;
+
+  return _AutoIntent.none;
+}
+
+List<String> _handleNaturalLanguageIntent(
   String text,
   SensorController controller,
 ) {
   final lower = text.toLowerCase();
-  final wantsOn = lower.contains('enciende') ||
-      lower.contains('prende') ||
-      lower.contains('turn on') ||
-      lower.contains('encender') ||
-      lower.contains('activar');
+  final normalized = _stripDiacritics(lower);
 
-  final wantsOff = lower.contains('apaga') ||
-      lower.contains('apague') ||
-      lower.contains('turn off') ||
-      lower.contains('apag') ||
-      lower.contains('desactiva');
+  final wantsOn = _containsAny(normalized, [
+    'enciende',
+    'prende',
+    'turn on',
+    'encender',
+    'activa',
+    'activar',
+    'habilita',
+    'habilitar',
+    'enable',
+  ]);
 
-  final mentionsLight =
-      lower.contains('bombillo') || lower.contains('luz') || lower.contains('light');
-  final mentionsFan =
-      lower.contains('ventilador') || lower.contains('fan');
+  final wantsOff = _containsAny(normalized, [
+    'apaga',
+    'apague',
+    'turn off',
+    'apag',
+    'desactiva',
+    'desactivar',
+    'deshabilita',
+    'deshabilitar',
+    'disable',
+  ]);
 
-  var handled = false;
-  if (mentionsLight && wantsOn) {
+  final mentionsLight = _containsAny(normalized, [
+    'bombillo',
+    'luz',
+    'light',
+  ]);
+  final mentionsFan = _containsAny(normalized, [
+    'ventilador',
+    'fan',
+  ]);
+
+  final handledMessages = <String>[];
+  if (mentionsLight && wantsOn && !wantsOff) {
     controller.turnLedOn();
-    handled = true;
-  } else if (mentionsLight && wantsOff) {
+    handledMessages.add('Bombillo encendido.');
+  } else if (mentionsLight && wantsOff && !wantsOn) {
     controller.turnLedOff();
-    handled = true;
+    handledMessages.add('Bombillo apagado.');
   }
 
-  if (mentionsFan && wantsOn) {
+  if (mentionsFan && wantsOn && !wantsOff) {
     controller.turnFanOn();
-    handled = true;
-  } else if (mentionsFan && wantsOff) {
+    handledMessages.add('Ventilador encendido.');
+  } else if (mentionsFan && wantsOff && !wantsOn) {
     controller.turnFanOff();
-    handled = true;
+    handledMessages.add('Ventilador apagado.');
   }
 
-  return handled;
+  return handledMessages;
 }
+
+bool _containsAny(String text, List<String> patterns) {
+  for (final pattern in patterns) {
+    if (text.contains(pattern)) return true;
+  }
+  return false;
+}
+
+String _stripDiacritics(String input) {
+  return input
+      .replaceAll(RegExp(r'[\u00E1\u00E0\u00E2\u00E3\u00E4]'), 'a')
+      .replaceAll(RegExp(r'[\u00E9\u00E8\u00EA\u00EB]'), 'e')
+      .replaceAll(RegExp(r'[\u00ED\u00EC\u00EE\u00EF]'), 'i')
+      .replaceAll(RegExp(r'[\u00F3\u00F2\u00F4\u00F5\u00F6]'), 'o')
+      .replaceAll(RegExp(r'[\u00FA\u00F9\u00FB\u00FC]'), 'u')
+      .replaceAll('\u00F1', 'n')
+      .replaceAll('\u00E7', 'c');
+}
+
 
 class _QuickActionsBar extends StatelessWidget {
   const _QuickActionsBar({
@@ -1107,3 +1347,4 @@ class _MessageInputBar extends StatelessWidget {
     );
   }
 }
+
