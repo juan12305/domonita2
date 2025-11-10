@@ -5,9 +5,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../domain/sensor_data.dart';
+import '../../l10n/l10n_extensions.dart';
 import '../controllers/sensor_controller.dart';
-import '../widgets/particle_field.dart';
 import '../theme/color_utils.dart';
+import '../widgets/particle_field.dart';
 import 'dashboard_page.dart';
 
 class HistoryPage extends StatelessWidget {
@@ -66,7 +67,10 @@ class HistoryPage extends StatelessWidget {
                               color: Colors.white, size: 32),
                         ).animate().scale(duration: 400.ms),
                         Text(
-                          'Historial de Datos',
+                          context.l10n.literal(
+                            es: 'Historial de Datos',
+                            en: 'Data history',
+                          ),
                           style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontSize: 24,
@@ -122,6 +126,7 @@ class _HistoryConnectionStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = connected ? Colors.greenAccent : Colors.redAccent;
+    final l10n = context.l10n;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -132,7 +137,9 @@ class _HistoryConnectionStatus extends StatelessWidget {
         ).animate().scale(duration: 800.ms),
         const SizedBox(width: 8),
         Text(
-          connected ? 'Conectado' : 'Desconectado',
+          connected
+              ? l10n.literal(es: 'Conectado', en: 'Connected')
+              : l10n.literal(es: 'Desconectado', en: 'Disconnected'),
           style: GoogleFonts.poppins(
             color: color,
             fontSize: 16,
@@ -156,6 +163,7 @@ class _HistoryList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final formatter = DateFormat('dd/MM/yyyy HH:mm:ss');
+    final l10n = context.l10n;
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 24),
       itemCount: entries.length,
@@ -165,6 +173,12 @@ class _HistoryList extends StatelessWidget {
         final dateTime = DateTime.tryParse(item.timestamp);
         final formattedDate =
             dateTime != null ? formatter.format(dateTime) : item.timestamp;
+        final recordNumber = entries.length - reverseIndex;
+        final temperature = item.temperature.toStringAsFixed(1);
+        final humidity = item.humidity.toStringAsFixed(1);
+        final lightLabel = item.light == 0
+            ? l10n.literal(es: 'Mucha', en: 'Bright')
+            : l10n.literal(es: 'Poca', en: 'Low');
 
         return Card(
           color: adjustOpacity(Colors.white, 0.12),
@@ -175,7 +189,10 @@ class _HistoryList extends StatelessWidget {
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
             title: Text(
-              'Registro ${entries.length - reverseIndex}',
+              l10n.literal(
+                es: 'Registro $recordNumber',
+                en: 'Entry $recordNumber',
+              ),
               style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 18,
@@ -186,14 +203,20 @@ class _HistoryList extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Temperatura: ${item.temperature.toStringAsFixed(1)}°C',
+                  l10n.literal(
+                    es: 'Temperatura: $temperature °C',
+                    en: 'Temperature: $temperature °C',
+                  ),
                   style: GoogleFonts.poppins(
                     color: Colors.orangeAccent,
                     fontSize: 14,
                   ),
                 ),
                 Text(
-                  'Humedad: ${item.humidity.toStringAsFixed(1)}%',
+                  l10n.literal(
+                    es: 'Humedad: $humidity %',
+                    en: 'Humidity: $humidity %',
+                  ),
                   style: GoogleFonts.poppins(
                     color:
                         isBright ? Colors.blue.shade800 : Colors.blueAccent,
@@ -201,7 +224,10 @@ class _HistoryList extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Luz: ${item.light == 0 ? "Mucha" : "Poca"}',
+                  l10n.literal(
+                    es: 'Luz: $lightLabel',
+                    en: 'Light: $lightLabel',
+                  ),
                   style: GoogleFonts.poppins(
                     color: item.light == 0
                         ? Colors.yellowAccent
@@ -210,7 +236,10 @@ class _HistoryList extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Fecha: $formattedDate',
+                  l10n.literal(
+                    es: 'Fecha: $formattedDate',
+                    en: 'Date: $formattedDate',
+                  ),
                   style: GoogleFonts.poppins(
                     color: Colors.white70,
                     fontSize: 12,
@@ -238,7 +267,10 @@ class _EmptyHistoryMessage extends StatelessWidget {
     final color = isBright ? Colors.white : Colors.white70;
     return Center(
       child: Text(
-        'Sin registros aún.\nLos datos aparecerán aquí.',
+        context.l10n.literal(
+          es: 'Sin registros aún.\nLos datos aparecerán aquí.',
+          en: 'No entries yet.\nData will appear here.',
+        ),
         style: GoogleFonts.poppins(
           color: color,
           fontSize: 18,

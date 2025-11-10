@@ -6,6 +6,8 @@ import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/sensor_data.dart';
+import '../../l10n/l10n_extensions.dart';
+import '../controllers/language_controller.dart';
 import '../controllers/sensor_controller.dart';
 import '../widgets/particle_field.dart';
 import '../theme/color_utils.dart';
@@ -42,6 +44,10 @@ class ControlPage extends StatelessWidget {
     );
     final decisionDuration = context.select<SensorController, Duration>(
       (c) => c.decisionCacheDuration,
+    );
+    final languageController = context.read<LanguageController>();
+    final currentLocale = context.select<LanguageController, Locale>(
+      (c) => c.locale,
     );
     final isBright = sensorData?.light == 0;
 
@@ -123,7 +129,9 @@ class ControlPage extends StatelessWidget {
                   child: _TopMenu(
                     currentLevel: level,
                     decisionDuration: decisionDuration,
+                    currentLocale: currentLocale,
                     onLevelChanged: controller.setConsumptionLevel,
+                    onLocaleChanged: languageController.setLocale,
                     onLogout: () async {
                       try {
                         await Supabase.instance.client.auth.signOut();
@@ -156,6 +164,9 @@ class _ConnectionStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = connected ? Colors.greenAccent : Colors.redAccent;
+    final statusLabel = connected
+        ? context.l10n.literal(es: 'Conectado', en: 'Connected')
+        : context.l10n.literal(es: 'Desconectado', en: 'Disconnected');
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -166,7 +177,7 @@ class _ConnectionStatus extends StatelessWidget {
         ).animate().scale(duration: 800.ms),
         const SizedBox(width: 8),
         Text(
-          connected ? 'Conectado' : 'Desconectado',
+          statusLabel,
           style: GoogleFonts.poppins(
             color: color,
             fontSize: 20,
@@ -178,23 +189,32 @@ class _ConnectionStatus extends StatelessWidget {
   }
 }
 
+
 class _TopMenu extends StatelessWidget {
   const _TopMenu({
     required this.currentLevel,
     required this.decisionDuration,
+    required this.currentLocale,
     required this.onLevelChanged,
+    required this.onLocaleChanged,
     required this.onLogout,
   });
 
   final AiConsumptionLevel currentLevel;
   final Duration decisionDuration;
+  final Locale currentLocale;
   final ValueChanged<AiConsumptionLevel> onLevelChanged;
+  final Future<void> Function(Locale locale) onLocaleChanged;
   final Future<void> Function() onLogout;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final languageLabel = currentLocale.languageCode == 'es'
+        ? l10n.t('language_spanish')
+        : l10n.t('language_english');
     return PopupMenuButton<_ControlMenuAction>(
-      tooltip: 'Abrir menu',
+      tooltip: l10n.t('control_menu_tooltip'),
       color: adjustOpacity(Colors.black, 0.85),
       offset: const Offset(-4, 8),
       icon: Container(
@@ -213,7 +233,7 @@ class _TopMenu extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.tune, color: Colors.tealAccent),
             title: Text(
-              'Consumo de IA',
+              l10n.t('control_menu_ai_consumption'),
               style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 14,
@@ -221,7 +241,34 @@ class _TopMenu extends StatelessWidget {
               ),
             ),
             subtitle: Text(
-              'Actual: cada ${decisionDuration.inSeconds}s',
+              l10n.t(
+                'control_menu_frequency',
+                params: {
+                  'seconds': decisionDuration.inSeconds.toString(),
+                },
+              ),
+              style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12),
+            ),
+          ),
+        ),
+        PopupMenuItem<_ControlMenuAction>(
+          value: _ControlMenuAction.language,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.language, color: Colors.lightBlueAccent),
+            title: Text(
+              l10n.t('control_menu_language'),
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            subtitle: Text(
+              l10n.t(
+                'control_menu_language_current',
+                params: {'language': languageLabel},
+              ),
               style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12),
             ),
           ),
@@ -233,7 +280,7 @@ class _TopMenu extends StatelessWidget {
               const Icon(Icons.logout_rounded, color: Colors.redAccent),
               const SizedBox(width: 8),
               Text(
-                'Cerrar sesión',
+                l10n.t('action_logout'),
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 14,
@@ -252,6 +299,14 @@ class _TopMenu extends StatelessWidget {
               onLevelChanged(selected);
             }
             break;
+          case _ControlMenuAction.language:
+            final selectedLocale =
+                await _showLanguageDialog(context, currentLocale);
+            if (selectedLocale != null &&
+                selectedLocale.languageCode != currentLocale.languageCode) {
+              await onLocaleChanged(selectedLocale);
+            }
+            break;
           case _ControlMenuAction.logout:
             await onLogout();
             break;
@@ -267,8 +322,11 @@ class _TopMenu extends StatelessWidget {
         AiConsumptionLevel selectedLevel = currentLevel;
         return StatefulBuilder(
           builder: (context, setState) {
+            final dialogL10n = context.l10n;
             return AlertDialog(
-              title: const Text('Consumo de IA'),
+              title: Text(
+                dialogL10n.literal(es: 'Consumo de IA', en: 'AI consumption'),
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,9 +340,9 @@ class _TopMenu extends StatelessWidget {
                     items: AiConsumptionLevel.values
                         .map(
                           (level) => DropdownMenuItem<AiConsumptionLevel>(
-                            value: level,
-                            child: Text(_labelForLevel(level)),
-                          ),
+                                value: level,
+                                child: Text(_labelForLevel(context, level)),
+                              ),
                         )
                         .toList(),
                     onChanged: (value) {
@@ -295,7 +353,12 @@ class _TopMenu extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Frecuencia: cada ${_durationForLevel(selectedLevel).inSeconds}s',
+                    dialogL10n.literal(
+                      es:
+                          'Frecuencia: cada ${_durationForLevel(selectedLevel).inSeconds}s',
+                      en:
+                          'Frequency: every ${_durationForLevel(selectedLevel).inSeconds}s',
+                    ),
                     style: GoogleFonts.poppins(
                       color: Colors.white70,
                       fontSize: 13,
@@ -306,16 +369,63 @@ class _TopMenu extends StatelessWidget {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancelar'),
+                  child: Text(
+                    dialogL10n.literal(es: 'Cancelar', en: 'Cancel'),
+                  ),
                 ),
                 FilledButton(
                   onPressed: () =>
                       Navigator.of(dialogContext).pop(selectedLevel),
-                  child: const Text('Guardar'),
+                  child: Text(
+                    dialogL10n.literal(es: 'Guardar', en: 'Save'),
+                  ),
                 ),
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  Future<Locale?> _showLanguageDialog(
+    BuildContext context,
+    Locale selectedLocale,
+  ) {
+    final l10n = context.l10n;
+    final locales = [
+      const Locale('es'),
+      const Locale('en'),
+    ];
+    return showDialog<Locale>(
+      context: context,
+      builder: (dialogContext) {
+        return SimpleDialog(
+          title: Text(l10n.t('control_menu_language')),
+          children: locales.map((locale) {
+            final label = locale.languageCode == 'es'
+                ? l10n.t('language_spanish')
+                : l10n.t('language_english');
+            final isSelected =
+                locale.languageCode == selectedLocale.languageCode;
+            return ListTile(
+              leading: Icon(
+                Icons.flag,
+                color: isSelected ? Colors.tealAccent : Colors.white70,
+              ),
+              title: Text(
+                label,
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+              trailing: isSelected
+                  ? const Icon(Icons.check, color: Colors.tealAccent)
+                  : null,
+              onTap: () => Navigator.of(dialogContext).pop(locale),
+            );
+          }).toList(),
         );
       },
     );
@@ -332,18 +442,18 @@ class _TopMenu extends StatelessWidget {
     }
   }
 
-  static String _labelForLevel(AiConsumptionLevel level) {
+  static String _labelForLevel(BuildContext context, AiConsumptionLevel level) {
+    final l10n = context.l10n;
     switch (level) {
       case AiConsumptionLevel.high:
-        return 'Alto';
+        return l10n.literal(es: 'Alto (cada 10s)', en: 'High (every 10s)');
       case AiConsumptionLevel.medium:
-        return 'Medio';
+        return l10n.literal(es: 'Medio (cada 15s)', en: 'Medium (every 15s)');
       case AiConsumptionLevel.low:
-        return 'Bajo';
+        return l10n.literal(es: 'Bajo (cada 25s)', en: 'Low (every 25s)');
     }
   }
 }
-
 class _SensorOverview extends StatelessWidget {
   const _SensorOverview({
     required this.data,
@@ -357,6 +467,10 @@ class _SensorOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final temperatureLabel =
+        l10n.literal(es: 'Temperatura', en: 'Temperature');
+    final humidityLabel = l10n.literal(es: 'Humedad', en: 'Humidity');
     final double spacing = isCompact ? 16.0 : 32.0;
     final double runSpacing = isCompact ? 16.0 : 32.0;
     final double indicatorSpacing = isCompact ? 24.0 : 36.0;
@@ -370,7 +484,7 @@ class _SensorOverview extends StatelessWidget {
           alignment: WrapAlignment.center,
           children: [
             _buildGaugeWithHalo(
-              title: 'Temperatura',
+              title: temperatureLabel,
               value: data.temperature,
               maxValue: 50,
               unit: '\u00B0C',
@@ -380,7 +494,7 @@ class _SensorOverview extends StatelessWidget {
               scale: gaugeScale,
             ),
             _buildGaugeWithHalo(
-              title: 'Humedad',
+              title: humidityLabel,
               value: data.humidity,
               maxValue: 100,
               unit: '%',
@@ -394,7 +508,11 @@ class _SensorOverview extends StatelessWidget {
           ],
         ),
         SizedBox(height: indicatorSpacing),
-        _buildLightIndicator(data.light, isCompact: isCompact),
+        _buildLightIndicator(
+          context,
+          data.light,
+          isCompact: isCompact,
+        ),
       ],
     );
   }
@@ -407,7 +525,10 @@ class _WaitingData extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Text(
-        'Esperando datos del sensor...',
+        context.l10n.literal(
+          es: 'Esperando datos del sensor...',
+          en: 'Waiting for sensor data...',
+        ),
         style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
       ),
     );
@@ -441,6 +562,27 @@ class _ActionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final manualLabel = l10n.literal(es: 'Manual', en: 'Manual');
+    final autoLabel = l10n.literal(es: 'Auto', en: 'Auto');
+    final aiHint = l10n.literal(
+      es: 'La IA controla los actuadores automáticamente.',
+      en: 'AI is controlling the actuators automatically.',
+    );
+    final lightOnLabel =
+        l10n.literal(es: 'Encender Bombillo', en: 'Turn light on');
+    final lightOffLabel =
+        l10n.literal(es: 'Apagar Bombillo', en: 'Turn light off');
+    final fanOnLabel =
+        l10n.literal(es: 'Encender FAN', en: 'Turn fan on');
+    final fanOffLabel =
+        l10n.literal(es: 'Apagar FAN', en: 'Turn fan off');
+    final historyLabel =
+        l10n.literal(es: 'Ver Historial', en: 'View history');
+    final assistantLabel =
+        l10n.literal(es: 'Asistente IA', en: 'AI assistant');
+    final voiceLabel =
+        l10n.literal(es: 'Control por Voz', en: 'Voice control');
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: isCompact ? 12.0 : 20.0,
@@ -451,7 +593,7 @@ class _ActionPanel extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('Manual', style: TextStyle(color: Colors.white)),
+              Text(manualLabel, style: const TextStyle(color: Colors.white)),
               Switch(
                 value: isAutoMode,
                 onChanged: onToggleAuto,
@@ -460,14 +602,14 @@ class _ActionPanel extends StatelessWidget {
                   adjustOpacity(Colors.greenAccent, 0.3),
                 ),
               ),
-              const Text('Auto', style: TextStyle(color: Colors.white)),
+              Text(autoLabel, style: const TextStyle(color: Colors.white)),
             ],
           ),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
             child: isAutoMode
                 ? Text(
-                    'La IA controla los actuadores automáticamente.',
+                    aiHint,
                     key: const ValueKey('auto-hint'),
                     style: GoogleFonts.poppins(
                       color: Colors.white70,
@@ -495,7 +637,7 @@ class _ActionPanel extends StatelessWidget {
                       width: buttonWidth,
                       child: _buildActionButton(
                         icon: Icons.lightbulb,
-                        label: 'Encender Bombillo',
+                        label: lightOnLabel,
                         color: Colors.greenAccent,
                         onPressed: onLedOn,
                       ),
@@ -504,7 +646,7 @@ class _ActionPanel extends StatelessWidget {
                       width: buttonWidth,
                       child: _buildActionButton(
                         icon: Icons.lightbulb_outline,
-                        label: 'Apagar Bombillo',
+                        label: lightOffLabel,
                         color: Colors.redAccent,
                         onPressed: onLedOff,
                       ),
@@ -513,7 +655,7 @@ class _ActionPanel extends StatelessWidget {
                       width: buttonWidth,
                       child: _buildActionButton(
                         icon: Icons.air,
-                        label: 'Encender FAN',
+                        label: fanOnLabel,
                         color: Colors.blueAccent,
                         onPressed: onFanOn,
                       ),
@@ -522,7 +664,7 @@ class _ActionPanel extends StatelessWidget {
                       width: buttonWidth,
                       child: _buildActionButton(
                         icon: Icons.air_outlined,
-                        label: 'Apagar FAN',
+                        label: fanOffLabel,
                         color: Colors.orangeAccent,
                         onPressed: onFanOff,
                       ),
@@ -549,7 +691,7 @@ class _ActionPanel extends StatelessWidget {
                     width: buttonWidth,
                     child: _buildActionButton(
                       icon: Icons.history,
-                      label: 'Ver Historial',
+                      label: historyLabel,
                       color: Colors.purpleAccent,
                       onPressed: onHistory,
                     ),
@@ -558,7 +700,7 @@ class _ActionPanel extends StatelessWidget {
                     width: buttonWidth,
                     child: _buildActionButton(
                       icon: Icons.chat,
-                      label: 'Asistente IA',
+                      label: assistantLabel,
                       color: Colors.tealAccent,
                       onPressed: onAiChat,
                     ),
@@ -567,7 +709,7 @@ class _ActionPanel extends StatelessWidget {
                     width: buttonWidth,
                     child: _buildActionButton(
                       icon: Icons.mic,
-                      label: 'Control por Voz',
+                      label: voiceLabel,
                       color: Colors.pinkAccent,
                       onPressed: onVoiceControl,
                     ),
@@ -756,12 +898,19 @@ Widget _buildActionButton({
   );
 }
 
-enum _ControlMenuAction { settings, logout }
+enum _ControlMenuAction { settings, language, logout }
 
-Widget _buildLightIndicator(int light, {required bool isCompact}) {
+Widget _buildLightIndicator(
+  BuildContext context,
+  int light, {
+  required bool isCompact,
+}) {
+  final l10n = context.l10n;
   final bool isBright = light == 0;
   final Color color = isBright ? Colors.yellowAccent : Colors.indigoAccent;
-  final String status = isBright ? 'Mucha luz' : 'Poca luz';
+  final String status = isBright
+      ? l10n.literal(es: 'Mucha luz', en: 'Lots of light')
+      : l10n.literal(es: 'Poca luz', en: 'Low light');
   final IconData icon = isBright
       ? Icons.wb_sunny_rounded
       : Icons.nightlight_round;
@@ -812,7 +961,7 @@ Widget _buildLightIndicator(int light, {required bool isCompact}) {
             ),
           ),
           Text(
-            'Luz ambiental',
+            l10n.literal(es: 'Luz ambiental', en: 'Ambient light'),
             style: GoogleFonts.poppins(
               color: Colors.white70,
               fontSize: 16 * scale,

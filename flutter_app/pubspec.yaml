@@ -31,6 +31,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  flutter_localizations:
+    sdk: flutter
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -46,7 +49,7 @@ dependencies:
   flutter_animate: ^4.5.2
   syncfusion_flutter_gauges: ^31.1.23
   google_fonts: ^6.3.2
-  intl: ^0.19.0
+  intl: ^0.20.2
   shared_preferences: ^2.3.2
 
   # Google Gemini AI

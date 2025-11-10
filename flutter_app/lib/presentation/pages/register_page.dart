@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../theme/color_utils.dart';
 
+import '../../l10n/l10n_extensions.dart';
+import '../theme/color_utils.dart';
 import '../widgets/particle_field.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -45,6 +46,7 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Future<void> _register() async {
+    final l10n = context.l10n;
     setState(() {
       _loading = true;
       _error = null;
@@ -71,11 +73,23 @@ class _RegisterPageState extends State<RegisterPage>
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registro exitoso ✅')),
+          SnackBar(
+            content: Text(
+              l10n.literal(
+                es: 'Registro exitoso ✅',
+                en: 'Registration successful ✅',
+              ),
+            ),
+          ),
         );
         Navigator.pushReplacementNamed(context, '/control');
       } else {
-        setState(() => _error = 'No se pudo registrar el usuario.');
+        setState(
+          () => _error = l10n.literal(
+            es: 'No se pudo registrar el usuario.',
+            en: 'Unable to register the user.',
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -90,6 +104,14 @@ class _RegisterPageState extends State<RegisterPage>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final title = l10n.literal(es: 'Crea tu cuenta', en: 'Create your account');
+    final buttonText =
+        l10n.literal(es: 'Registrarse', en: 'Sign up');
+    final loginPrompt = l10n.literal(
+      es: '¿Ya tienes cuenta? Inicia sesión',
+      en: 'Already have an account? Log in',
+    );
     return Scaffold(
       body: Stack(
         children: [
@@ -133,7 +155,7 @@ class _RegisterPageState extends State<RegisterPage>
                       child: Column(
                         children: [
                           Text(
-                            "Crea tu cuenta",
+                            title,
                             style: GoogleFonts.poppins(
                               color: Colors.white,
                               fontSize: 28,
@@ -143,13 +165,34 @@ class _RegisterPageState extends State<RegisterPage>
 
                           const SizedBox(height: 30),
 
-                          _buildTextField(_nameController, "Nombre", Icons.person),
+                          _buildTextField(
+                            context,
+                            _nameController,
+                            l10n.literal(es: 'Nombre', en: 'Name'),
+                            Icons.person,
+                          ),
                           const SizedBox(height: 16),
-                          _buildTextField(_usernameController, "Usuario", Icons.account_circle),
+                          _buildTextField(
+                            context,
+                            _usernameController,
+                            l10n.literal(es: 'Usuario', en: 'Username'),
+                            Icons.account_circle,
+                          ),
                           const SizedBox(height: 16),
-                          _buildTextField(_emailController, "Correo electrónico", Icons.email),
+                          _buildTextField(
+                            context,
+                            _emailController,
+                            l10n.literal(es: 'Correo electrónico', en: 'Email'),
+                            Icons.email,
+                          ),
                           const SizedBox(height: 16),
-                          _buildTextField(_passwordController, "Contraseña", Icons.lock, isPassword: true),
+                          _buildTextField(
+                            context,
+                            _passwordController,
+                            l10n.literal(es: 'Contraseña', en: 'Password'),
+                            Icons.lock,
+                            isPassword: true,
+                          ),
 
                           const SizedBox(height: 20),
                           if (_error != null)
@@ -171,16 +214,22 @@ class _RegisterPageState extends State<RegisterPage>
                             ),
                             child: _loading
                                 ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text("Registrarse",
-                                    style: TextStyle(fontSize: 16, color: Colors.white)),
+                                : Text(
+                                    buttonText,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ).animate().fadeIn().scale(),
 
                           const SizedBox(height: 12),
                           TextButton(
-                            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-                            child: const Text(
-                              "¿Ya tienes cuenta? Inicia sesión",
-                              style: TextStyle(color: Colors.white70),
+                            onPressed: () =>
+                                Navigator.pushReplacementNamed(context, '/login'),
+                            child: Text(
+                              loginPrompt,
+                              style: const TextStyle(color: Colors.white70),
                             ),
                           )
                         ],
@@ -196,8 +245,14 @@ class _RegisterPageState extends State<RegisterPage>
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon,
-      {bool isPassword = false}) {
+  Widget _buildTextField(
+    BuildContext context,
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool isPassword = false,
+  }) {
+    final l10n = context.l10n;
     return TextFormField(
       controller: controller,
       obscureText: isPassword,
@@ -217,8 +272,12 @@ class _RegisterPageState extends State<RegisterPage>
         filled: true,
         fillColor: adjustOpacity(Colors.white, 0.1),
       ),
-      validator: (value) =>
-          value == null || value.isEmpty ? 'Completa este campo' : null,
+      validator: (value) => value == null || value.isEmpty
+          ? l10n.literal(
+              es: 'Completa este campo',
+              en: 'Please complete this field',
+            )
+          : null,
     );
   }
 }

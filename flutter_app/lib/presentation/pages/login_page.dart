@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../l10n/l10n_extensions.dart';
 import '../../services/biometric_auth_service.dart';
 import '../theme/color_utils.dart';
 import '../widgets/particle_field.dart';
@@ -49,6 +50,7 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Future<void> _login() async {
+    final l10n = context.l10n;
     setState(() {
       _loading = true;
       _error = null;
@@ -60,7 +62,10 @@ class _LoginPageState extends State<LoginPage>
       );
 
       if (response.user == null) {
-        setState(() => _error = 'Credenciales incorrectas.');
+        setState(() => _error = l10n.literal(
+              es: 'Credenciales incorrectas.',
+              en: 'Incorrect credentials.',
+            ));
         return;
       }
 
@@ -72,7 +77,14 @@ class _LoginPageState extends State<LoginPage>
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inicio de sesión exitoso ✅')),
+        SnackBar(
+          content: Text(
+            l10n.literal(
+              es: 'Inicio de sesión exitoso ✅',
+              en: 'Signed in successfully ✅',
+            ),
+          ),
+        ),
       );
       Navigator.pushReplacementNamed(context, '/control');
     } catch (e) {
@@ -114,13 +126,17 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Future<void> _attemptBiometricLogin({bool autoTriggered = false}) async {
+    final l10n = context.l10n;
     final sessionString = await _biometricService.savedSessionString();
     if (sessionString == null) {
       await _biometricService.disableBiometrics();
       if (!autoTriggered && mounted) {
         setState(() {
           _biometricEnabled = false;
-          _error = 'No hay una sesión guardada para usar la huella.';
+          _error = l10n.literal(
+            es: 'No hay una sesión guardada para usar la huella.',
+            en: 'No stored session available for fingerprint login.',
+          );
         });
       }
       return;
@@ -137,12 +153,18 @@ class _LoginPageState extends State<LoginPage>
 
     try {
       final authenticated = await _biometricService.authenticate(
-        reason: 'Confirma tu huella para continuar',
+        reason: l10n.literal(
+          es: 'Confirma tu huella para continuar',
+          en: 'Confirm your fingerprint to continue',
+        ),
       );
 
       if (!authenticated) {
         if (!autoTriggered && mounted) {
-          setState(() => _error = 'Autenticación cancelada.');
+          setState(() => _error = l10n.literal(
+                es: 'Autenticación cancelada.',
+                en: 'Authentication cancelled.',
+              ));
         }
         return;
       }
@@ -151,7 +173,12 @@ class _LoginPageState extends State<LoginPage>
           await Supabase.instance.client.auth.recoverSession(sessionString);
 
       if (response.session == null) {
-        throw Exception('No se pudo restaurar la sesión.');
+        throw Exception(
+          l10n.literal(
+            es: 'No se pudo restaurar la sesión.',
+            en: 'The session could not be restored.',
+          ),
+        );
       }
 
       if (!mounted) return;
@@ -163,8 +190,10 @@ class _LoginPageState extends State<LoginPage>
         setState(() {
           _biometricEnabled = false;
           if (!autoTriggered) {
-            _error =
-                'No se pudo iniciar con huella. Usa tu correo y contraseña.';
+            _error = l10n.literal(
+              es: 'No se pudo iniciar con huella. Usa tu correo y contraseña.',
+              en: 'Fingerprint login failed. Use your email and password.',
+            );
           }
         });
       }
@@ -180,8 +209,10 @@ class _LoginPageState extends State<LoginPage>
   Future<void> _handleBiometricEnrollment(Session session) async {
     if (!_biometricAvailable) return;
 
+    final l10n = context.l10n;
     final email = session.user.email ?? _emailController.text.trim();
-    final friendlyEmail = email.isEmpty ? 'tu cuenta' : email;
+    final friendlyEmail =
+        email.isEmpty ? l10n.literal(es: 'tu cuenta', en: 'your account') : email;
 
     if (_biometricEnabled) {
       await _biometricService.refreshStoredSession(session, email);
@@ -191,18 +222,32 @@ class _LoginPageState extends State<LoginPage>
     final shouldEnable = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Usar huella digital'),
+            title: Text(
+              l10n.literal(
+                es: 'Usar huella digital',
+                en: 'Use fingerprint login',
+              ),
+            ),
             content: Text(
-              '¿Quieres usar la huella para iniciar sesión como $friendlyEmail sin volver a escribir la contraseña?',
+              l10n.literal(
+                es:
+                    '¿Quieres usar la huella para iniciar sesión como $friendlyEmail sin volver a escribir la contraseña?',
+                en:
+                    'Do you want to use your fingerprint to sign in as $friendlyEmail without retyping the password?',
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Ahora no'),
+                child: Text(
+                  l10n.literal(es: 'Ahora no', en: 'Not now'),
+                ),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Sí, activar'),
+                child: Text(
+                  l10n.literal(es: 'Sí, activar', en: 'Yes, enable'),
+                ),
               ),
             ],
           ),
@@ -228,14 +273,29 @@ class _LoginPageState extends State<LoginPage>
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Huella registrada para el próximo inicio.'),
+      SnackBar(
+        content: Text(
+          l10n.literal(
+            es: 'Huella registrada para el próximo inicio.',
+            en: 'Fingerprint saved for next sign in.',
+          ),
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final loginTitle = l10n.literal(es: 'Inicia sesión', en: 'Sign in');
+    final fingerprintLabel = l10n.literal(
+      es: 'Iniciar con huella',
+      en: 'Sign in with fingerprint',
+    );
+    final registerPrompt = l10n.literal(
+      es: '¿No tienes cuenta? Regístrate',
+      en: "Don't have an account? Register",
+    );
     return Scaffold(
       body: Stack(
         children: [
@@ -279,7 +339,7 @@ class _LoginPageState extends State<LoginPage>
                       child: Column(
                         children: [
                           Text(
-                            "Inicia sesión",
+                            loginTitle,
                             style: GoogleFonts.poppins(
                               color: Colors.white,
                               fontSize: 28,
@@ -304,8 +364,8 @@ class _LoginPageState extends State<LoginPage>
                               icon: const Icon(Icons.fingerprint, color: Colors.white),
                               label: Text(
                                 _biometricEmail != null
-                                    ? 'Iniciar con huella ($_biometricEmail)'
-                                    : 'Iniciar con huella',
+                                    ? '$fingerprintLabel ($_biometricEmail)'
+                                    : fingerprintLabel,
                               ),
                             ),
                             if (_biometricBusy)
@@ -319,9 +379,26 @@ class _LoginPageState extends State<LoginPage>
                             const SizedBox(height: 20),
                           ],
 
-                          _buildTextField(_emailController, "Correo electrónico", Icons.email),
+                          _buildTextField(
+                            context,
+                            _emailController,
+                            l10n.literal(
+                              es: 'Correo electrónico',
+                              en: 'Email',
+                            ),
+                            Icons.email,
+                          ),
                           const SizedBox(height: 16),
-                          _buildTextField(_passwordController, "Contraseña", Icons.lock, isPassword: true),
+                          _buildTextField(
+                            context,
+                            _passwordController,
+                            l10n.literal(
+                              es: 'Contraseña',
+                              en: 'Password',
+                            ),
+                            Icons.lock,
+                            isPassword: true,
+                          ),
 
                           const SizedBox(height: 20),
                           if (_error != null)
@@ -343,16 +420,22 @@ class _LoginPageState extends State<LoginPage>
                             ),
                             child: _loading
                                 ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text("Iniciar sesión",
-                                    style: TextStyle(fontSize: 16, color: Colors.white)),
+                                : Text(
+                                    loginTitle,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ).animate().fadeIn().scale(),
 
                           const SizedBox(height: 12),
                           TextButton(
-                            onPressed: () => Navigator.pushReplacementNamed(context, '/register'),
-                            child: const Text(
-                              "¿No tienes cuenta? Regístrate",
-                              style: TextStyle(color: Colors.white70),
+                            onPressed: () =>
+                                Navigator.pushReplacementNamed(context, '/register'),
+                            child: Text(
+                              registerPrompt,
+                              style: const TextStyle(color: Colors.white70),
                             ),
                           )
                         ],
@@ -368,8 +451,14 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon,
-      {bool isPassword = false}) {
+  Widget _buildTextField(
+    BuildContext context,
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool isPassword = false,
+  }) {
+    final l10n = context.l10n;
     return TextFormField(
       controller: controller,
       obscureText: isPassword,
@@ -389,8 +478,12 @@ class _LoginPageState extends State<LoginPage>
         filled: true,
         fillColor: adjustOpacity(Colors.white, 0.1),
       ),
-      validator: (value) =>
-          value == null || value.isEmpty ? 'Completa este campo' : null,
+      validator: (value) => value == null || value.isEmpty
+          ? l10n.literal(
+              es: 'Completa este campo',
+              en: 'Please complete this field',
+            )
+          : null,
     );
   }
 }

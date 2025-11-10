@@ -4,9 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/services/voice_command_service.dart';
+import '../../l10n/l10n_extensions.dart';
 import '../controllers/sensor_controller.dart';
-import '../widgets/particle_field.dart';
 import '../theme/color_utils.dart';
+import '../widgets/particle_field.dart';
 
 class VoiceControlPage extends StatefulWidget {
   final VoiceCommandService voiceService;
@@ -41,9 +42,15 @@ class _VoiceControlPageState extends State<VoiceControlPage>
   Future<void> _initializeVoiceService() async {
     final initialized = await widget.voiceService.initialize();
     if (!initialized && mounted) {
+      final l10n = context.l10n;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo inicializar el reconocimiento de voz'),
+        SnackBar(
+          content: Text(
+            l10n.literal(
+              es: 'No se pudo inicializar el reconocimiento de voz',
+              en: 'Could not initialize voice recognition',
+            ),
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -58,9 +65,15 @@ class _VoiceControlPageState extends State<VoiceControlPage>
 
   void _startListening() async {
     if (!widget.voiceService.isAvailable) {
+      final l10n = context.l10n;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El reconocimiento de voz no está disponible'),
+        SnackBar(
+          content: Text(
+            l10n.literal(
+              es: 'El reconocimiento de voz no está disponible',
+              en: 'Voice recognition is not available',
+            ),
+          ),
           backgroundColor: Colors.orangeAccent,
         ),
       );
@@ -100,6 +113,7 @@ class _VoiceControlPageState extends State<VoiceControlPage>
   Future<void> _processCommand(String command) async {
     final controller = context.read<SensorController>();
     final sensorData = controller.sensorData;
+    final l10n = context.l10n;
 
     final result = await widget.voiceService.processVoiceCommand(
       command,
@@ -108,7 +122,8 @@ class _VoiceControlPageState extends State<VoiceControlPage>
 
     if (mounted) {
       setState(() {
-        _lastResponse = result['reason'] ?? 'Sin respuesta';
+        _lastResponse = result['reason'] ??
+            l10n.literal(es: 'Sin respuesta', en: 'No response');
         _isProcessing = false;
       });
 
@@ -173,6 +188,7 @@ class _VoiceControlPageState extends State<VoiceControlPage>
     final controller = context.watch<SensorController>();
     final data = controller.sensorData;
     final connected = controller.connected;
+    final l10n = context.l10n;
     final bool isBright = data == null ? true : data.light == 0;
     final gradient = isBright ? _dayGradient : _nightGradient;
 
@@ -200,7 +216,7 @@ class _VoiceControlPageState extends State<VoiceControlPage>
                               color: Colors.white, size: 32),
                         ).animate().scale(duration: 400.ms),
                         Text(
-                          'Control por Voz',
+                          l10n.literal(es: 'Control por Voz', en: 'Voice control'),
                           style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontSize: 24,
@@ -229,7 +245,10 @@ class _VoiceControlPageState extends State<VoiceControlPage>
                           const SizedBox(height: 40),
                           if (_lastCommand.isNotEmpty)
                             _CommandCard(
-                              title: 'Tu comando:',
+                              title: l10n.literal(
+                                es: 'Tu comando:',
+                                en: 'Your command:',
+                              ),
                               content: _lastCommand,
                               icon: Icons.mic,
                               color: Colors.blueAccent,
@@ -237,7 +256,10 @@ class _VoiceControlPageState extends State<VoiceControlPage>
                           if (_lastResponse.isNotEmpty) ...[
                             const SizedBox(height: 20),
                             _CommandCard(
-                              title: 'Respuesta:',
+                              title: l10n.literal(
+                                es: 'Respuesta:',
+                                en: 'Response:',
+                              ),
                               content: _lastResponse,
                               icon: Icons.smart_toy,
                               color: Colors.greenAccent,
@@ -268,6 +290,7 @@ class _ConnectionStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = connected ? Colors.greenAccent : Colors.redAccent;
+    final l10n = context.l10n;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -278,7 +301,9 @@ class _ConnectionStatus extends StatelessWidget {
         ).animate().scale(duration: 800.ms),
         const SizedBox(width: 8),
         Text(
-          connected ? 'Conectado' : 'Desconectado',
+          connected
+              ? l10n.literal(es: 'Conectado', en: 'Connected')
+              : l10n.literal(es: 'Desconectado', en: 'Disconnected'),
           style: GoogleFonts.poppins(
             color: color,
             fontSize: 14,
@@ -414,6 +439,25 @@ class _CommandCard extends StatelessWidget {
 class _InstructionsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final instructions = [
+      l10n.literal(
+        es: 'Enciende/Apaga la luz',
+        en: 'Turn the light on/off',
+      ),
+      l10n.literal(
+        es: 'Enciende/Apaga el ventilador',
+        en: 'Turn the fan on/off',
+      ),
+      l10n.literal(
+        es: 'Enciende/Apaga el bombillo',
+        en: 'Turn the bulb on/off',
+      ),
+      l10n.literal(
+        es: 'Apaga todo',
+        en: 'Turn everything off',
+      ),
+    ];
     return Card(
       color: adjustOpacity(Colors.white, 0.12),
       shape: RoundedRectangleBorder(
@@ -429,7 +473,10 @@ class _InstructionsCard extends StatelessWidget {
                 const Icon(Icons.info_outline, color: Colors.cyanAccent, size: 24),
                 const SizedBox(width: 12),
                 Text(
-                  'Comandos disponibles:',
+                  l10n.literal(
+                    es: 'Comandos disponibles:',
+                    en: 'Available commands:',
+                  ),
                   style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 16,
@@ -439,13 +486,14 @@ class _InstructionsCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            const _InstructionItem(text: 'Enciende/Apaga la luz'),
-            const _InstructionItem(text: 'Enciende/Apaga el ventilador'),
-            const _InstructionItem(text: 'Enciende/Apaga el bombillo'),
-            const _InstructionItem(text: 'Apaga todo'),
+            for (final text in instructions)
+              _InstructionItem(text: text),
             const SizedBox(height: 12),
             Text(
-              'Mantén presionado el botón y di tu comando claramente',
+              l10n.literal(
+                es: 'Mantén presionado el botón y di tu comando claramente',
+                en: 'Hold the button and say your command clearly',
+              ),
               style: GoogleFonts.poppins(
                 color: Colors.white60,
                 fontSize: 12,

@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'data/repositories/sensor_repository.dart';
 import 'data/services/gemini_service.dart';
 import 'data/services/voice_command_service.dart';
-import 'domain/sensor_data.dart';
 import 'domain/actuator.dart';
+import 'domain/sensor_data.dart';
+import 'l10n/app_localizations.dart';
+import 'presentation/controllers/language_controller.dart';
 import 'presentation/controllers/sensor_controller.dart';
-import 'presentation/pages/control_page.dart';
-import 'presentation/pages/register_page.dart';
-import 'presentation/pages/login_page.dart';
-import 'presentation/pages/history_page.dart';
 import 'presentation/pages/ai_chat_page.dart';
+import 'presentation/pages/control_page.dart';
+import 'presentation/pages/history_page.dart';
+import 'presentation/pages/login_page.dart';
+import 'presentation/pages/register_page.dart';
 import 'presentation/pages/voice_control_page.dart';
 import 'services/prompt_repository.dart';
 
@@ -82,32 +85,49 @@ class MyApp extends StatelessWidget {
             geminiService: geminiService,
           ),
         ),
+        ChangeNotifierProvider(
+          create: (_) => LanguageController(),
+        ),
       ],
-      child: MaterialApp(
-        title: 'Domótica App',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.light,
-          ),
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-        ),
-        debugShowCheckedModeBanner: false,
-        initialRoute: '/login',
-        routes: {
-          '/login': (context) => const LoginPage(),
-          '/register': (context) => const RegisterPage(),
-          '/control': (context) => const ControlPage(),
-          '/history': (context) => const HistoryPage(),
-          '/ai_chat': (context) => const AiChatPage(),
-          '/voice_control': (context) => VoiceControlPage(voiceService: voiceService),
+      child: Consumer<LanguageController>(
+        builder: (context, languageController, _) {
+          return MaterialApp(
+            locale: languageController.locale,
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            onGenerateTitle: (context) =>
+                AppLocalizations.of(context).t('app_title'),
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: Colors.blue,
+                brightness: Brightness.light,
+              ),
+              useMaterial3: true,
+            ),
+            darkTheme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: Colors.blue,
+                brightness: Brightness.dark,
+              ),
+              useMaterial3: true,
+            ),
+            debugShowCheckedModeBanner: false,
+            initialRoute: '/login',
+            routes: {
+              '/login': (context) => const LoginPage(),
+              '/register': (context) => const RegisterPage(),
+              '/control': (context) => const ControlPage(),
+              '/history': (context) => const HistoryPage(),
+              '/ai_chat': (context) => const AiChatPage(),
+              '/voice_control': (context) =>
+                  VoiceControlPage(voiceService: voiceService),
+            },
+          );
         },
       ),
     );

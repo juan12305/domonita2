@@ -10,6 +10,8 @@ import '../../data/services/gemini_service.dart';
 import '../controllers/sensor_controller.dart';
 import '../widgets/particle_field.dart';
 import '../theme/color_utils.dart';
+import '../../l10n/app_localizations.dart';
+import '../../l10n/l10n_extensions.dart';
 
 class AiChatPage extends StatefulWidget {
   const AiChatPage({super.key});
@@ -120,6 +122,7 @@ class _AiChatPageState extends State<AiChatPage> {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
+    final l10n = context.l10n;
     debugPrint('AiChatPage: Sending message: "$message"');
     setState(() => _isChatLoading = true);
     _messageController.clear();
@@ -142,7 +145,10 @@ class _AiChatPageState extends State<AiChatPage> {
     debugPrint('AiChatPage: Received response data: $responseData');
     if (!mounted) return;
 
-    String aiResponse = 'Error: No se pudo obtener respuesta de la IA';
+    String aiResponse = l10n.literal(
+      es: 'Error: No se pudo obtener respuesta de la IA',
+      en: 'Error: Could not obtain a response from the AI',
+    );
     if (responseData != null) {
       final rawResponse = responseData['response'];
       if (rawResponse is String) {
@@ -172,25 +178,51 @@ class _AiChatPageState extends State<AiChatPage> {
         }
       }
 
+      final autoOnText = l10n.literal(
+        es: 'Modo automático activado.',
+        en: 'Auto mode enabled.',
+      );
+      final autoOffText = l10n.literal(
+        es: 'Modo automático desactivado.',
+        en: 'Auto mode disabled.',
+      );
+      final lightOnText = l10n.literal(
+        es: 'Bombillo encendido.',
+        en: 'Light turned on.',
+      );
+      final lightOffText = l10n.literal(
+        es: 'Bombillo apagado.',
+        en: 'Light turned off.',
+      );
+      final fanOnText = l10n.literal(
+        es: 'Ventilador encendido.',
+        en: 'Fan turned on.',
+      );
+      final fanOffText = l10n.literal(
+        es: 'Ventilador apagado.',
+        en: 'Fan turned off.',
+      );
+
       if (autoIntent == _AutoIntent.on) {
         controller.setAutoMode(true);
-        addExecutedMessage('Modo automatico activado.');
+        addExecutedMessage(autoOnText);
         executedAction = true;
       } else if (autoIntent == _AutoIntent.off) {
         controller.setAutoMode(false);
-        addExecutedMessage('Modo automatico desactivado.');
+        addExecutedMessage(autoOffText);
         executedAction = true;
       }
 
       final userHandledMessages = _handleNaturalLanguageIntent(
         message,
         controller,
+        l10n,
       );
       if (userHandledMessages.isNotEmpty) {
-        for (final msg in userHandledMessages) {
-          addExecutedMessage(msg);
-          if (msg.contains('Bombillo')) userMentionsLight = true;
-          if (msg.contains('Ventilador')) userMentionsFan = true;
+        for (final handled in userHandledMessages) {
+          addExecutedMessage(handled.text);
+          if (handled.affectedLight) userMentionsLight = true;
+          if (handled.affectedFan) userMentionsFan = true;
         }
         executedAction = true;
       }
@@ -217,7 +249,7 @@ class _AiChatPageState extends State<AiChatPage> {
             continue;
           }
           controller.setAutoMode(true);
-          addExecutedMessage('Modo automatico activado.');
+          addExecutedMessage(autoOnText);
           executedAction = true;
           continue;
         }
@@ -227,7 +259,7 @@ class _AiChatPageState extends State<AiChatPage> {
             continue;
           }
           controller.setAutoMode(false);
-          addExecutedMessage('Modo automatico desactivado.');
+          addExecutedMessage(autoOffText);
           executedAction = true;
           continue;
         }
@@ -239,7 +271,7 @@ class _AiChatPageState extends State<AiChatPage> {
           case 'LED_ON':
           case 'LIGHT_ON':
             controller.turnLedOn();
-            addExecutedMessage('Bombillo encendido.');
+            addExecutedMessage(lightOnText);
             userMentionsLight = true;
             executedAction = true;
             break;
@@ -252,7 +284,7 @@ class _AiChatPageState extends State<AiChatPage> {
           case 'APAGAR BOMBILLO':
           case 'TURN OFF THE LIGHT':
             controller.turnLedOff();
-            addExecutedMessage('Bombillo apagado.');
+            addExecutedMessage(lightOffText);
             userMentionsLight = true;
             executedAction = true;
             break;
@@ -260,7 +292,7 @@ class _AiChatPageState extends State<AiChatPage> {
           case 'FAN_ON':
           case 'TURN_ON_FAN':
             controller.turnFanOn();
-            addExecutedMessage('Ventilador encendido.');
+            addExecutedMessage(fanOnText);
             userMentionsFan = true;
             executedAction = true;
             break;
@@ -271,7 +303,7 @@ class _AiChatPageState extends State<AiChatPage> {
           case 'TURN_OFF_THE_FAN':
           case 'APAGAR VENTILADOR':
             controller.turnFanOff();
-            addExecutedMessage('Ventilador apagado.');
+            addExecutedMessage(fanOffText);
             userMentionsFan = true;
             executedAction = true;
             break;
@@ -285,11 +317,14 @@ class _AiChatPageState extends State<AiChatPage> {
         final handledMessages = _handleNaturalLanguageIntent(
           combinedText,
           controller,
+          l10n,
         );
         if (handledMessages.isEmpty) {
           debugPrint('AiChatPage: No actionable command detected.');
         } else {
-          handledMessages.forEach(addExecutedMessage);
+          for (final handled in handledMessages) {
+            addExecutedMessage(handled.text);
+          }
           executedAction = true;
         }
       }
@@ -336,6 +371,7 @@ class _AiChatPageState extends State<AiChatPage> {
     setState(() => _isAnalysisLoading = true);
     final repository = Provider.of<SensorRepository>(context, listen: false);
     final data = repository.allSensorData.take(100).toList();
+    final l10n = context.l10n;
 
     final analysis = await _geminiService.generateAnalysis(data);
     if (!context.mounted) return;
@@ -373,7 +409,10 @@ class _AiChatPageState extends State<AiChatPage> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
-                        'Analisis de Datos del Sistema',
+                        l10n.literal(
+                          es: 'Análisis de Datos del Sistema',
+                          en: 'System Data Analysis',
+                        ),
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 20,
@@ -408,7 +447,7 @@ class _AiChatPageState extends State<AiChatPage> {
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: Text(
-                        'Cerrar',
+                        l10n.literal(es: 'Cerrar', en: 'Close'),
                         style: GoogleFonts.poppins(
                           color: Colors.tealAccent,
                           fontWeight: FontWeight.w500,
@@ -430,7 +469,10 @@ class _AiChatPageState extends State<AiChatPage> {
       try {
         await Supabase.instance.client.from('chat_history').insert({
           'user_id': userId,
-          'message': 'Generar analisis',
+          'message': l10n.literal(
+            es: 'Generar análisis',
+            en: 'Generate analysis',
+          ),
           'response': analysis,
           'analysis_data': data.map((d) => d.toJson()).toList(),
         });
@@ -445,10 +487,18 @@ class _AiChatPageState extends State<AiChatPage> {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Usuario no autenticado')),
+        SnackBar(
+          content: Text(
+            context.l10n.literal(
+              es: 'Usuario no autenticado',
+              en: 'User not authenticated',
+            ),
+          ),
+        ),
       );
       return;
     }
+    final l10n = context.l10n;
 
     showDialog(
       context: context,
@@ -480,7 +530,10 @@ class _AiChatPageState extends State<AiChatPage> {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'Historial de Chats',
+                        l10n.literal(
+                          es: 'Historial de Chats',
+                          en: 'Chat History',
+                        ),
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 18,
@@ -513,7 +566,10 @@ class _AiChatPageState extends State<AiChatPage> {
                       if (snapshot.hasError) {
                         return Center(
                           child: Text(
-                            'Error al cargar el historial',
+                            l10n.literal(
+                              es: 'Error al cargar el historial',
+                              en: 'Error loading history',
+                            ),
                             style: GoogleFonts.poppins(color: Colors.redAccent),
                           ),
                         );
@@ -533,7 +589,10 @@ class _AiChatPageState extends State<AiChatPage> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'No hay chats en el historial',
+                                l10n.literal(
+                                  es: 'No hay chats en el historial',
+                                  en: 'No chats in history',
+                                ),
                                 style: GoogleFonts.poppins(
                                   color: Colors.white38,
                                   fontSize: 16,
@@ -582,7 +641,7 @@ class _AiChatPageState extends State<AiChatPage> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          'Chat ${index + 1}',
+                                          '${l10n.literal(es: 'Chat', en: 'Chat')} ${index + 1}',
                                           style: GoogleFonts.poppins(
                                             color: Colors.white,
                                             fontSize: 16,
@@ -662,6 +721,7 @@ class _AiChatPageState extends State<AiChatPage> {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final sensorData = context.watch<SensorController>().sensorData;
+    final l10n = context.l10n;
     final gradient = (sensorData?.light == 0)
         ? AiChatPage._dayGradient
         : AiChatPage._nightGradient;
@@ -729,7 +789,7 @@ class _AiChatPageState extends State<AiChatPage> {
                 SizedBox(width: titleSpacing),
                 Flexible(
                   child: Text(
-                    'Asistente IA',
+                    l10n.literal(es: 'Asistente IA', en: 'AI assistant'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
@@ -745,17 +805,23 @@ class _AiChatPageState extends State<AiChatPage> {
               IconButton(
                 icon: const Icon(Icons.add, color: Colors.tealAccent),
                 onPressed: _startNewChat,
-                tooltip: 'Nuevo chat',
+                tooltip: l10n.literal(es: 'Nuevo chat', en: 'New chat'),
               ),
               IconButton(
                 icon: const Icon(Icons.history, color: Colors.tealAccent),
                 onPressed: () => _showChatHistory(context),
-                tooltip: 'Ver historial completo',
+                tooltip: l10n.literal(
+                  es: 'Ver historial completo',
+                  en: 'View full history',
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.tealAccent),
                 onPressed: _loadChatHistory,
-                tooltip: 'Recargar historial',
+                tooltip: l10n.literal(
+                  es: 'Recargar historial',
+                  en: 'Refresh history',
+                ),
               ),
             ],
           ),
@@ -859,7 +925,10 @@ class _AiChatPageState extends State<AiChatPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '¡Hola! Soy tu asistente de IA',
+            context.l10n.literal(
+              es: '¡Hola! Soy tu asistente de IA',
+              en: 'Hi! I am your AI assistant',
+            ),
             style: GoogleFonts.poppins(
               color: Colors.white,
               fontSize: 20,
@@ -868,7 +937,12 @@ class _AiChatPageState extends State<AiChatPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Preguntame sobre tu sistema de domotica,\nlos sensores, o genera un analisis de datos.',
+            context.l10n.literal(
+              es:
+                  'Pregúntame sobre tu sistema de domótica,\nlos sensores o genera un análisis de datos.',
+              en:
+                  'Ask me about your smart home system,\nsensors, or generate a data analysis.',
+            ),
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               color: Colors.white60,
@@ -927,7 +1001,12 @@ class _AiChatPageState extends State<AiChatPage> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      isUser ? 'Tu' : 'Asistente IA',
+                      isUser
+                          ? context.l10n.literal(es: 'Tú', en: 'You')
+                          : context.l10n.literal(
+                              es: 'Asistente IA',
+                              en: 'AI assistant',
+                            ),
                       style: GoogleFonts.poppins(
                         color: isUser ? Colors.tealAccent : Colors.blueAccent,
                         fontSize: 12,
@@ -1083,9 +1162,10 @@ _AutoIntent _detectAutoIntent(String normalized) {
   return _AutoIntent.none;
 }
 
-List<String> _handleNaturalLanguageIntent(
+List<_HandledIntentMessage> _handleNaturalLanguageIntent(
   String text,
   SensorController controller,
+  AppLocalizations l10n,
 ) {
   final lower = text.toLowerCase();
   final normalized = _stripDiacritics(lower);
@@ -1124,24 +1204,56 @@ List<String> _handleNaturalLanguageIntent(
     'fan',
   ]);
 
-  final handledMessages = <String>[];
+  final handledMessages = <_HandledIntentMessage>[];
   if (mentionsLight && wantsOn && !wantsOff) {
     controller.turnLedOn();
-    handledMessages.add('Bombillo encendido.');
+    handledMessages.add(
+      _HandledIntentMessage(
+        text: l10n.literal(es: 'Bombillo encendido.', en: 'Light turned on.'),
+        affectedLight: true,
+      ),
+    );
   } else if (mentionsLight && wantsOff && !wantsOn) {
     controller.turnLedOff();
-    handledMessages.add('Bombillo apagado.');
+    handledMessages.add(
+      _HandledIntentMessage(
+        text: l10n.literal(es: 'Bombillo apagado.', en: 'Light turned off.'),
+        affectedLight: true,
+      ),
+    );
   }
 
   if (mentionsFan && wantsOn && !wantsOff) {
     controller.turnFanOn();
-    handledMessages.add('Ventilador encendido.');
+    handledMessages.add(
+      _HandledIntentMessage(
+        text: l10n.literal(es: 'Ventilador encendido.', en: 'Fan turned on.'),
+        affectedFan: true,
+      ),
+    );
   } else if (mentionsFan && wantsOff && !wantsOn) {
     controller.turnFanOff();
-    handledMessages.add('Ventilador apagado.');
+    handledMessages.add(
+      _HandledIntentMessage(
+        text: l10n.literal(es: 'Ventilador apagado.', en: 'Fan turned off.'),
+        affectedFan: true,
+      ),
+    );
   }
 
   return handledMessages;
+}
+
+class _HandledIntentMessage {
+  const _HandledIntentMessage({
+    required this.text,
+    this.affectedLight = false,
+    this.affectedFan = false,
+  });
+
+  final String text;
+  final bool affectedLight;
+  final bool affectedFan;
 }
 
 bool _containsAny(String text, List<String> patterns) {
@@ -1180,6 +1292,12 @@ class _QuickActionsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final analysisLabel =
+        l10n.literal(es: 'Análisis de Datos', en: 'Data analysis');
+    final generatingLabel =
+        l10n.literal(es: 'Generando...', en: 'Generating...');
+    final messagesLabel = l10n.literal(es: 'mensajes', en: 'messages');
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: horizontalPadding,
@@ -1200,7 +1318,7 @@ class _QuickActionsBar extends StatelessWidget {
                     )
                   : const Icon(Icons.analytics_outlined),
               label: Text(
-                isLoading ? 'Generando...' : 'Analisis de Datos',
+                isLoading ? generatingLabel : analysisLabel,
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
               ),
               style: ElevatedButton.styleFrom(
@@ -1229,7 +1347,7 @@ class _QuickActionsBar extends StatelessWidget {
               border: Border.all(color: adjustOpacity(Colors.blueAccent, 0.35)),
             ),
             child: Text(
-              '$messageCount mensajes',
+              '$messageCount $messagesLabel',
               style: GoogleFonts.poppins(
                 color: Colors.blueAccent,
                 fontSize: stackContent ? 11 : 12,
@@ -1286,6 +1404,11 @@ class _MessageInputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final hintText = l10n.literal(
+      es: 'Pregunta sobre tu sistema de domótica...',
+      en: 'Ask about your smart home system...',
+    );
     final bool allowMultiLine = isLandscape || !isTablet;
     return Container(
       margin: outerMargin,
@@ -1303,7 +1426,7 @@ class _MessageInputBar extends StatelessWidget {
               style: GoogleFonts.poppins(color: Colors.white),
               maxLines: allowMultiLine ? 2 : 1,
               decoration: InputDecoration(
-                hintText: 'Pregunta sobre tu sistema de domotica...',
+                hintText: hintText,
                 hintStyle: GoogleFonts.poppins(
                   color: Colors.white38,
                   fontSize: isTablet ? 16 : 14,
