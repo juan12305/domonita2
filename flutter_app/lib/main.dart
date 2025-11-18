@@ -19,6 +19,7 @@ import 'presentation/pages/history_page.dart';
 import 'presentation/pages/login_page.dart';
 import 'presentation/pages/register_page.dart';
 import 'presentation/pages/voice_control_page.dart';
+import 'presentation/pages/admin_prompts_page.dart';
 import 'services/prompt_repository.dart';
 
 void main() async {
@@ -50,7 +51,7 @@ void main() async {
   final prompts = PromptRepository();
   await prompts.init();
   final geminiService = GeminiService(geminiApiKey, prompts);
-  final voiceService = VoiceCommandService(geminiApiKey);
+  final voiceService = VoiceCommandService(geminiApiKey, prompts);
 
   runApp(MyApp(
     repository: repository,
@@ -126,6 +127,7 @@ class MyApp extends StatelessWidget {
               '/ai_chat': (context) => const AiChatPage(),
               '/voice_control': (context) =>
                   VoiceControlPage(voiceService: voiceService),
+              '/admin_prompts': (context) => const AdminPromptsPage(),
             },
           );
         },

@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../../domain/sensor_data.dart';
+import '../../services/prompt_repository.dart';
 
 class VoiceCommandService {
   final stt.SpeechToText _speech = stt.SpeechToText();
   final GenerativeModel _model;
+  final PromptRepository prompts;
   bool _isInitialized = false;
 
-  VoiceCommandService(String apiKey)
+  VoiceCommandService(String apiKey, this.prompts)
       : _model = GenerativeModel(
           model: 'gemini-2.0-flash-lite',
           apiKey: apiKey,
@@ -81,32 +83,13 @@ class VoiceCommandService {
     try {
       debugPrint('Processing voice command: $command');
 
-      // Crear un prompt específico para comandos de voz
-      final prompt = '''
-Eres un asistente de domótica. El usuario dijo: "$command"
-
-Datos actuales de los sensores:
-${currentSensorData != null ? '''
-- Temperatura: ${currentSensorData.temperature}°C
-- Humedad: ${currentSensorData.humidity}%
-- Luz: ${currentSensorData.light == 0 ? "Mucha luz" : "Poca luz"}
-''' : 'No hay datos disponibles'}
-
-Interpreta el comando y responde en formato JSON:
-{
-  "light_action": "ON" o "OFF" o "NO_CHANGE",
-  "fan_action": "ON" o "OFF" o "NO_CHANGE",
-  "reason": "explicación breve de la acción"
-}
-
-Comandos válidos:
-- Encender/apagar luz/bombillo/lámpara
-- Encender/apagar ventilador/fan
-- Encender/apagar todo
-- Apagar todo
-
-Responde SOLO con el JSON, sin texto adicional.
-''';
+      // Usar prompt desde Supabase
+      final prompt = prompts.render('voice_command', {
+        'command': command,
+        'temperature': currentSensorData?.temperature.toString() ?? 'N/A',
+        'humidity': currentSensorData?.humidity.toString() ?? 'N/A',
+        'light': currentSensorData?.light == 0 ? 'Mucha luz' : 'Poca luz',
+      });
 
       final response = await _model.generateContent([
         Content.text(prompt),

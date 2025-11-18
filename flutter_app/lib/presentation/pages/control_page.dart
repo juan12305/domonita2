@@ -274,6 +274,26 @@ class _TopMenu extends StatelessWidget {
           ),
         ),
         PopupMenuItem<_ControlMenuAction>(
+          value: _ControlMenuAction.admin,
+          child: Row(
+            children: [
+              const Icon(Icons.admin_panel_settings, color: Colors.tealAccent),
+              const SizedBox(width: 8),
+              Text(
+                l10n.literal(
+                  es: 'Panel Admin',
+                  en: 'Admin Panel',
+                ),
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<_ControlMenuAction>(
           value: _ControlMenuAction.logout,
           child: Row(
             children: [
@@ -306,6 +326,9 @@ class _TopMenu extends StatelessWidget {
                 selectedLocale.languageCode != currentLocale.languageCode) {
               await onLocaleChanged(selectedLocale);
             }
+            break;
+          case _ControlMenuAction.admin:
+            Navigator.of(context).pushNamed('/admin_prompts');
             break;
           case _ControlMenuAction.logout:
             await onLogout();
@@ -898,7 +921,7 @@ Widget _buildActionButton({
   );
 }
 
-enum _ControlMenuAction { settings, language, logout }
+enum _ControlMenuAction { settings, language, admin, logout }
 
 Widget _buildLightIndicator(
   BuildContext context,

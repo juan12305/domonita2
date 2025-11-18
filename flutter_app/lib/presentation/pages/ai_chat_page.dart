@@ -3,30 +3,21 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../data/repositories/sensor_repository.dart';
 import '../../data/services/gemini_service.dart';
 import '../controllers/sensor_controller.dart';
 import '../widgets/particle_field.dart';
 import '../theme/color_utils.dart';
-import '../../l10n/app_localizations.dart';
 import '../../l10n/l10n_extensions.dart';
+import '../widgets/ai_chat/chat_helpers.dart';
+import '../widgets/ai_chat/quick_actions_bar.dart';
+import '../widgets/ai_chat/message_input_bar.dart';
+import '../widgets/ai_chat/chat_message_bubble.dart';
+import '../widgets/ai_chat/chat_empty_state.dart';
 
 class AiChatPage extends StatefulWidget {
   const AiChatPage({super.key});
-
-  static const LinearGradient _dayGradient = LinearGradient(
-    colors: [Color(0xFF56CCF2), Color(0xFF2F80ED), Color(0xFF6DD5FA)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient _nightGradient = LinearGradient(
-    colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
 
   @override
   State<AiChatPage> createState() => _AiChatPageState();
@@ -159,15 +150,15 @@ class _AiChatPageState extends State<AiChatPage> {
 
       final actions = responseData['actions'] as List<dynamic>? ?? [];
       final controller = Provider.of<SensorController>(context, listen: false);
-      final normalizedMessage = _stripDiacritics(message.toLowerCase());
-      final _AutoIntent autoIntent = _detectAutoIntent(normalizedMessage);
-      final bool userForcedAutoOn = autoIntent == _AutoIntent.on;
-      final bool userForcedAutoOff = autoIntent == _AutoIntent.off;
-      var userMentionsFan = _containsAny(normalizedMessage, ['ventilador', 'fan']);
+      final normalizedMessage = stripDiacritics(message.toLowerCase());
+      final AutoIntent autoIntent = detectAutoIntent(normalizedMessage);
+      final bool userForcedAutoOn = autoIntent == AutoIntent.on;
+      final bool userForcedAutoOff = autoIntent == AutoIntent.off;
+      var userMentionsFan = containsAny(normalizedMessage, ['ventilador', 'fan']);
       var userMentionsLight =
-          _containsAny(normalizedMessage, ['bombillo', 'luz', 'light']);
+          containsAny(normalizedMessage, ['bombillo', 'luz', 'light']);
       final bool restrictToAutoOnly =
-          autoIntent != _AutoIntent.none && !userMentionsFan && !userMentionsLight;
+          autoIntent != AutoIntent.none && !userMentionsFan && !userMentionsLight;
 
       var executedAction = false;
       final executedMessages = <String>[];
@@ -203,17 +194,17 @@ class _AiChatPageState extends State<AiChatPage> {
         en: 'Fan turned off.',
       );
 
-      if (autoIntent == _AutoIntent.on) {
+      if (autoIntent == AutoIntent.on) {
         controller.setAutoMode(true);
         addExecutedMessage(autoOnText);
         executedAction = true;
-      } else if (autoIntent == _AutoIntent.off) {
+      } else if (autoIntent == AutoIntent.off) {
         controller.setAutoMode(false);
         addExecutedMessage(autoOffText);
         executedAction = true;
       }
 
-      final userHandledMessages = _handleNaturalLanguageIntent(
+      final userHandledMessages = handleNaturalLanguageIntent(
         message,
         controller,
         l10n,
@@ -228,7 +219,7 @@ class _AiChatPageState extends State<AiChatPage> {
       }
 
       for (final dynamic rawAction in actions) {
-        final actionValue = _normalizeAction(rawAction);
+        final actionValue = normalizeAction(rawAction);
         if (actionValue == null) {
           debugPrint('AiChatPage: Ignoring invalid action $rawAction');
           continue;
@@ -243,7 +234,7 @@ class _AiChatPageState extends State<AiChatPage> {
           continue;
         }
 
-        if (_looksLikeAutoModeOnAction(action)) {
+        if (looksLikeAutoModeOnAction(action)) {
           if (userForcedAutoOff) {
             debugPrint('AiChatPage: Skipping $action because user requested AUTO OFF');
             continue;
@@ -253,7 +244,7 @@ class _AiChatPageState extends State<AiChatPage> {
           executedAction = true;
           continue;
         }
-        if (_looksLikeAutoModeOffAction(action)) {
+        if (looksLikeAutoModeOffAction(action)) {
           if (userForcedAutoOn) {
             debugPrint('AiChatPage: Skipping $action because user requested AUTO ON');
             continue;
@@ -314,7 +305,7 @@ class _AiChatPageState extends State<AiChatPage> {
 
       if (!executedAction) {
         final combinedText = '$message $aiResponse';
-        final handledMessages = _handleNaturalLanguageIntent(
+        final handledMessages = handleNaturalLanguageIntent(
           combinedText,
           controller,
           l10n,
@@ -723,8 +714,8 @@ class _AiChatPageState extends State<AiChatPage> {
     final sensorData = context.watch<SensorController>().sensorData;
     final l10n = context.l10n;
     final gradient = (sensorData?.light == 0)
-        ? AiChatPage._dayGradient
-        : AiChatPage._nightGradient;
+        ? AppColors.dayGradient
+        : AppColors.nightGradient;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -837,7 +828,7 @@ class _AiChatPageState extends State<AiChatPage> {
               SafeArea(
                 child: Column(
                   children: [
-                    _QuickActionsBar(
+                    QuickActionsBar(
                       isLoading: _isAnalysisLoading,
                       isTablet: isTablet,
                       messageCount: _messages.length,
@@ -853,7 +844,7 @@ class _AiChatPageState extends State<AiChatPage> {
                           border: Border.all(color: adjustOpacity(Colors.white, 0.1)),
                         ),
                         child: _messages.isEmpty
-                            ? _buildEmptyState()
+                            ? const ChatEmptyState()
                             : ListView.builder(
                                 controller: _scrollController,
                                 padding: EdgeInsets.symmetric(
@@ -866,20 +857,20 @@ class _AiChatPageState extends State<AiChatPage> {
                                   return Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      _buildMessageBubble(
-                                        {'user': msg['user']!},
-                                        true,
-                                        isTablet,
-                                        bubbleMaxWidth,
-                                        bubbleSideInset,
+                                      ChatMessageBubble(
+                                        message: msg['user']!,
+                                        isUser: true,
+                                        isTablet: isTablet,
+                                        maxBubbleWidth: bubbleMaxWidth,
+                                        horizontalInset: bubbleSideInset,
                                       ),
                                       const SizedBox(height: 8),
-                                      _buildMessageBubble(
-                                        {'ai': msg['ai']!},
-                                        false,
-                                        isTablet,
-                                        bubbleMaxWidth,
-                                        bubbleSideInset,
+                                      ChatMessageBubble(
+                                        message: msg['ai']!,
+                                        isUser: false,
+                                        isTablet: isTablet,
+                                        maxBubbleWidth: bubbleMaxWidth,
+                                        horizontalInset: bubbleSideInset,
                                       ),
                                     ],
                                   );
@@ -887,7 +878,7 @@ class _AiChatPageState extends State<AiChatPage> {
                               ),
                       ),
                     ),
-                    _MessageInputBar(
+                    MessageInputBar(
                       controller: _messageController,
                       isLandscape: isLandscape,
                       isLoading: _isChatLoading,
@@ -906,568 +897,5 @@ class _AiChatPageState extends State<AiChatPage> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: adjustOpacity(Colors.tealAccent, 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.chat_bubble_outline,
-              color: Colors.tealAccent,
-              size: 48,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            context.l10n.literal(
-              es: '¡Hola! Soy tu asistente de IA',
-              en: 'Hi! I am your AI assistant',
-            ),
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.literal(
-              es:
-                  'Pregúntame sobre tu sistema de domótica,\nlos sensores o genera un análisis de datos.',
-              en:
-                  'Ask me about your smart home system,\nsensors, or generate a data analysis.',
-            ),
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
-              color: Colors.white60,
-              fontSize: 14,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ).animate().fadeIn(duration: 600.ms),
-    );
-  }
-
-  Widget _buildMessageBubble(
-    Map<String, String> msg,
-    bool isUser,
-    bool isTablet,
-    double maxBubbleWidth,
-    double horizontalInset,
-  ) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: isTablet ? 16 : 12,
-        left: isUser ? horizontalInset : 0,
-        right: isUser ? 0 : horizontalInset,
-      ),
-      child: Align(
-        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-          child: Container(
-            padding: EdgeInsets.all(isTablet ? 20 : 16),
-            decoration: BoxDecoration(
-              color: isUser
-                  ? adjustOpacity(Colors.tealAccent, 0.2)
-                  : const Color(0xFF16213E),
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: isUser ? const Radius.circular(16) : const Radius.circular(4),
-                bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(16),
-              ),
-              border: Border.all(
-                color: isUser ? adjustOpacity(Colors.tealAccent, 0.3) : Colors.transparent,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isUser ? Icons.person : Icons.smart_toy_rounded,
-                      color: isUser ? Colors.tealAccent : Colors.blueAccent,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isUser
-                          ? context.l10n.literal(es: 'Tú', en: 'You')
-                          : context.l10n.literal(
-                              es: 'Asistente IA',
-                              en: 'AI assistant',
-                            ),
-                      style: GoogleFonts.poppins(
-                        color: isUser ? Colors.tealAccent : Colors.blueAccent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isUser ? msg['user']! : msg['ai']!,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: isTablet ? 16 : 14,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ).animate().fadeIn(duration: 300.ms).slideX(
-          begin: isUser ? 0.2 : -0.2,
-          duration: 300.ms,
-        );
-  }
-}
-
-String? _normalizeAction(dynamic rawAction) {
-  if (rawAction == null) return null;
-  if (rawAction is String) return rawAction.trim();
-  if (rawAction is Map && rawAction['action'] is String) {
-    return (rawAction['action'] as String).trim();
-  }
-  return rawAction.toString().trim();
-}
-
-bool _looksLikeAutoModeOnAction(String action) {
-  if (!action.contains('AUTO')) return false;
-  return action.contains('ON') ||
-      action.contains('ENABLE') ||
-      action.contains('ACTIVA') ||
-      action.contains('START');
-}
-
-bool _looksLikeAutoModeOffAction(String action) {
-  if (!action.contains('AUTO')) return false;
-  return action.contains('OFF') ||
-      action.contains('DISABLE') ||
-      action.contains('DESACT') ||
-      action.contains('STOP');
-}
-
-enum _AutoIntent { on, off, none }
-
-_AutoIntent _detectAutoIntent(String normalized) {
-  final offPhrases = [
-    'apaga el modo auto',
-    'apaga modo auto',
-    'apaga el modo automatico',
-    'apaga modo automatico',
-    'apaga modo inteligente',
-    'apaga control automatico',
-    'desactiva el modo auto',
-    'desactiva modo auto',
-    'desactiva el modo automatico',
-    'desactiva modo automatico',
-    'deshabilita el modo auto',
-    'deshabilita modo automatico',
-    'quita el modo auto',
-    'quita modo automatico',
-    'stop auto mode',
-    'turn off auto mode',
-    'disable auto mode',
-    'auto mode off',
-    'modo auto off',
-    'modo automatico off',
-  ];
-  for (final phrase in offPhrases) {
-    if (normalized.contains(phrase)) {
-      return _AutoIntent.off;
-    }
-  }
-
-  final onPhrases = [
-    'enciende el modo auto',
-    'enciende modo auto',
-    'enciende el modo automatico',
-    'enciende modo automatico',
-    'activa el modo auto',
-    'activa modo auto',
-    'activa el modo automatico',
-    'activa modo automatico',
-    'activa modo inteligente',
-    'habilita el modo auto',
-    'habilita modo automatico',
-    'usa el modo auto',
-    'enable auto mode',
-    'turn on auto mode',
-    'start auto mode',
-    'auto mode on',
-    'modo auto on',
-    'modo automatico on',
-  ];
-  for (final phrase in onPhrases) {
-    if (normalized.contains(phrase)) {
-      return _AutoIntent.on;
-    }
-  }
-
-  final mentionsAuto = normalized.contains('modo auto') ||
-      normalized.contains('modo automatico') ||
-      normalized.contains('auto mode') ||
-      normalized.contains('automatic mode') ||
-      normalized.contains('control automatico') ||
-      normalized.contains('modo inteligente');
-
-  if (!mentionsAuto) {
-    return _AutoIntent.none;
-  }
-
-  final onKeywords = [
-    'enciende',
-    'prende',
-    'turn on',
-    'encender',
-    'activa',
-    'activar',
-    'habilita',
-    'habilitar',
-    'enable',
-  ];
-  final offKeywords = [
-    'apaga',
-    'apague',
-    'turn off',
-    'apag',
-    'desactiva',
-    'desactivar',
-    'deshabilita',
-    'deshabilitar',
-    'disable',
-    'quita',
-  ];
-
-  final wantsOn = _containsAny(normalized, onKeywords);
-  final wantsOff = _containsAny(normalized, offKeywords);
-
-  if (wantsOn && !wantsOff) return _AutoIntent.on;
-  if (wantsOff && !wantsOn) return _AutoIntent.off;
-
-  return _AutoIntent.none;
-}
-
-List<_HandledIntentMessage> _handleNaturalLanguageIntent(
-  String text,
-  SensorController controller,
-  AppLocalizations l10n,
-) {
-  final lower = text.toLowerCase();
-  final normalized = _stripDiacritics(lower);
-
-  final wantsOn = _containsAny(normalized, [
-    'enciende',
-    'prende',
-    'turn on',
-    'encender',
-    'activa',
-    'activar',
-    'habilita',
-    'habilitar',
-    'enable',
-  ]);
-
-  final wantsOff = _containsAny(normalized, [
-    'apaga',
-    'apague',
-    'turn off',
-    'apag',
-    'desactiva',
-    'desactivar',
-    'deshabilita',
-    'deshabilitar',
-    'disable',
-  ]);
-
-  final mentionsLight = _containsAny(normalized, [
-    'bombillo',
-    'luz',
-    'light',
-  ]);
-  final mentionsFan = _containsAny(normalized, [
-    'ventilador',
-    'fan',
-  ]);
-
-  final handledMessages = <_HandledIntentMessage>[];
-  if (mentionsLight && wantsOn && !wantsOff) {
-    controller.turnLedOn();
-    handledMessages.add(
-      _HandledIntentMessage(
-        text: l10n.literal(es: 'Bombillo encendido.', en: 'Light turned on.'),
-        affectedLight: true,
-      ),
-    );
-  } else if (mentionsLight && wantsOff && !wantsOn) {
-    controller.turnLedOff();
-    handledMessages.add(
-      _HandledIntentMessage(
-        text: l10n.literal(es: 'Bombillo apagado.', en: 'Light turned off.'),
-        affectedLight: true,
-      ),
-    );
-  }
-
-  if (mentionsFan && wantsOn && !wantsOff) {
-    controller.turnFanOn();
-    handledMessages.add(
-      _HandledIntentMessage(
-        text: l10n.literal(es: 'Ventilador encendido.', en: 'Fan turned on.'),
-        affectedFan: true,
-      ),
-    );
-  } else if (mentionsFan && wantsOff && !wantsOn) {
-    controller.turnFanOff();
-    handledMessages.add(
-      _HandledIntentMessage(
-        text: l10n.literal(es: 'Ventilador apagado.', en: 'Fan turned off.'),
-        affectedFan: true,
-      ),
-    );
-  }
-
-  return handledMessages;
-}
-
-class _HandledIntentMessage {
-  const _HandledIntentMessage({
-    required this.text,
-    this.affectedLight = false,
-    this.affectedFan = false,
-  });
-
-  final String text;
-  final bool affectedLight;
-  final bool affectedFan;
-}
-
-bool _containsAny(String text, List<String> patterns) {
-  for (final pattern in patterns) {
-    if (text.contains(pattern)) return true;
-  }
-  return false;
-}
-
-String _stripDiacritics(String input) {
-  return input
-      .replaceAll(RegExp(r'[\u00E1\u00E0\u00E2\u00E3\u00E4]'), 'a')
-      .replaceAll(RegExp(r'[\u00E9\u00E8\u00EA\u00EB]'), 'e')
-      .replaceAll(RegExp(r'[\u00ED\u00EC\u00EE\u00EF]'), 'i')
-      .replaceAll(RegExp(r'[\u00F3\u00F2\u00F4\u00F5\u00F6]'), 'o')
-      .replaceAll(RegExp(r'[\u00FA\u00F9\u00FB\u00FC]'), 'u')
-      .replaceAll('\u00F1', 'n')
-      .replaceAll('\u00E7', 'c');
-}
-
-
-class _QuickActionsBar extends StatelessWidget {
-  const _QuickActionsBar({
-    required this.isLoading,
-    required this.isTablet,
-    required this.messageCount,
-    required this.onGenerateAnalysis,
-    required this.horizontalPadding,
-  });
-
-  final bool isLoading;
-  final bool isTablet;
-  final int messageCount;
-  final VoidCallback onGenerateAnalysis;
-  final double horizontalPadding;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final analysisLabel =
-        l10n.literal(es: 'Análisis de Datos', en: 'Data analysis');
-    final generatingLabel =
-        l10n.literal(es: 'Generando...', en: 'Generating...');
-    final messagesLabel = l10n.literal(es: 'mensajes', en: 'messages');
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: horizontalPadding,
-        vertical: isTablet ? 12 : 8,
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final bool stackContent = constraints.maxWidth < 420;
-          final Widget analysisButton = SizedBox(
-            width: stackContent ? double.infinity : null,
-            child: ElevatedButton.icon(
-              onPressed: isLoading ? null : onGenerateAnalysis,
-              icon: isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.analytics_outlined),
-              label: Text(
-                isLoading ? generatingLabel : analysisLabel,
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: adjustOpacity(Colors.tealAccent, 0.12),
-                foregroundColor: Colors.tealAccent,
-                padding: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 24 : (stackContent ? 18 : 16),
-                  vertical: isTablet ? 14 : 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: Colors.tealAccent, width: 1),
-                ),
-                elevation: 0,
-              ),
-            ),
-          );
-          final Widget messageCounter = Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: stackContent ? 8 : 12,
-            ),
-            decoration: BoxDecoration(
-              color: adjustOpacity(Colors.blueAccent, 0.12),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: adjustOpacity(Colors.blueAccent, 0.35)),
-            ),
-            child: Text(
-              '$messageCount $messagesLabel',
-              style: GoogleFonts.poppins(
-                color: Colors.blueAccent,
-                fontSize: stackContent ? 11 : 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          );
-
-          if (stackContent) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                analysisButton,
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.center,
-                  child: messageCounter,
-                ),
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              Expanded(child: analysisButton),
-              const SizedBox(width: 12),
-              messageCounter,
-            ],
-          );
-        },
-      ),
-    ).animate().fadeIn(duration: 300.ms);
-  }
-}
-
-class _MessageInputBar extends StatelessWidget {
-  const _MessageInputBar({
-    required this.controller,
-    required this.isLandscape,
-    required this.isLoading,
-    required this.isTablet,
-    required this.outerMargin,
-    required this.innerPadding,
-    required this.onSend,
-  });
-
-  final TextEditingController controller;
-  final bool isLandscape;
-  final bool isLoading;
-  final bool isTablet;
-  final EdgeInsets outerMargin;
-  final EdgeInsets innerPadding;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final hintText = l10n.literal(
-      es: 'Pregunta sobre tu sistema de domótica...',
-      en: 'Ask about your smart home system...',
-    );
-    final bool allowMultiLine = isLandscape || !isTablet;
-    return Container(
-      margin: outerMargin,
-      padding: innerPadding,
-      decoration: BoxDecoration(
-        color: adjustOpacity(Colors.black, 0.45),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: adjustOpacity(Colors.white, 0.12)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              style: GoogleFonts.poppins(color: Colors.white),
-              maxLines: allowMultiLine ? 2 : 1,
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: GoogleFonts.poppins(
-                  color: Colors.white38,
-                  fontSize: isTablet ? 16 : 14,
-                ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 0,
-                  vertical: allowMultiLine ? 8 : 12,
-                ),
-              ),
-              onSubmitted: (_) {
-                if (!isLoading) onSend();
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Colors.tealAccent, Colors.cyanAccent],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Icon(Icons.send, color: Colors.white),
-              onPressed: isLoading ? null : onSend,
-              padding: EdgeInsets.all(isTablet ? 16 : 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 

@@ -150,16 +150,12 @@ class GeminiService {
         text = match.group(0)!;
       }
 
-      try {
-        final result = jsonDecode(text);
-        if (result is Map<String, dynamic>) {
-          return {
-            'response': result['response'] ?? '',
-            'actions': List<String>.from(result['actions'] ?? []),
-          };
-        }
-      } catch (_) {
-        // Not JSON, fall through to plain text.
+      final result = jsonDecode(text);
+      if (result is Map<String, dynamic>) {
+        return {
+          'response': result['response'] ?? '',
+          'actions': List<String>.from(result['actions'] ?? []),
+        };
       }
 
       return {'response': text, 'actions': []};

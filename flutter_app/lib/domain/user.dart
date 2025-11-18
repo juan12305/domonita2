@@ -15,6 +15,8 @@ class User extends HiveObject {
   String username;
   @HiveField(5)
   String createdAt;
+  @HiveField(6)
+  bool isAdmin;
 
   User({
     required this.id,
@@ -23,5 +25,6 @@ class User extends HiveObject {
     required this.name,
     required this.username,
     required this.createdAt,
+    this.isAdmin = false,
   });
 }
